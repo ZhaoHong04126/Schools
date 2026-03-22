@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>大學神隊友</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/landing.css">
+    <style>
+        /* 新增：左側核心功能亮點區塊的樣式 */
+        .feature-highlights {
+            margin-top: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            max-width: 400px;
+        }
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 15px 20px;
+            border-radius: 16px;
+            transition: transform 0.3s ease, background 0.3s ease;
+        }
+        .feature-item:hover { transform: translateX(10px); background: rgba(255, 255, 255, 0.25); }
+        .feature-icon { font-size: 1.8rem; }
+        .feature-text strong {
+            display: block;
+            font-size: 1.05rem;
+            margin-bottom: 4px;
+        }
+        .feature-text small { font-size: 0.85rem; opacity: 0.85; }
+    </style>
+</head>
+<body>
+    <div class="split-layout" id="landing-page" style="opacity: 0; transition: opacity 0.3s;">
+        <div class="mobile-header">
+            <div class="brand-logo">
+                <img src="https://cdn-icons-png.flaticon.com/512/2921/2921222.png" width="28" height="28" alt="Logo">
+                大學神隊友
+            </div>
+            <button class="btn-login-trigger" onclick="openLoginModal()">登 入</button>
+        </div>
+        <div class="left-panel">
+            <div class="brand-logo desktop-logo">
+                <img src="https://cdn-icons-png.flaticon.com/512/2921/2921222.png" width="32" height="32" alt="Logo">
+                大學神隊友
+            </div>
+            <div class="hero-text">
+                <h1>你的專屬校園導航系統</h1>
+                <p class="hero-subtitle" style="font-size: 1.15rem; margin-top: 15px; font-weight: 500;">你的課表、社團、校園生活，一站搞定</p>
+            </div>
+            <div class="feature-highlights">
+                <div class="feature-item">
+                    <span class="feature-icon">🛡️</span>
+                    <div class="feature-text">
+                        <strong>選課避雷指南</strong>
+                        <small>學長姐真實評價，輕鬆避開雷課拿高分</small>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">📅</span>
+                    <div class="feature-text">
+                        <strong>學生活動行事曆</strong>
+                        <small>校園大小事與社團活動，一手掌握不錯過</small>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">💰</span>
+                    <div class="feature-text">
+                        <strong>學生專屬記帳</strong>
+                        <small>輕鬆管理生活費與各項開銷，月底不再吃土</small>
+                    </div>
+                </div>
+            </div>
+            <div style="position: absolute; bottom: 20px; left: 0; width: 100%; text-align: center; font-size: 0.85rem; opacity: 0.6; pointer-events: none;">
+                &copy; 2026 大學神隊友 All rights reserved.
+            </div>
+        </div>
+        <div class="right-panel">
+            <div class="login-wrapper">
+                <button class="btn-close-modal" onclick="closeLoginModal()">✖</button>
+                <h2>你的神隊友已上線</h2>
+                <p class="subtitle">一鍵登入，全面掌握你的校園生活</p>
+                <div class="primary-actions">
+                    <button class="btn-massive btn-google-massive" onclick="loginWithGoogle()">
+                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24">
+                        使用 Google 一鍵登入
+                    </button>
+                    <button class="btn-massive btn-guest-massive" onclick="loginAnonymously()">
+                        👻 免裝備新手試用體驗
+                    </button>
+                </div>
+                <div class="divider">或使用 Email 登入</div>
+                <div class="secondary-login">
+                    <div class="input-group">
+                        <input type="email" id="email" placeholder="電子信箱">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <input type="password" id="password" placeholder="密碼 (至少6位數)">
+                    </div>
+                    <div class="login-options">
+                        <label style="display:flex; align-items:center; cursor:pointer;">
+                            <input type="checkbox" id="chk-remember" style="margin-right: 8px; width:16px; height:16px; accent-color: var(--primary);" checked> 保持登入
+                        </label>
+                        <a onclick="forgotPassword()">忘記密碼？</a>
+                    </div>
+                    <button class="btn-main-outline" onclick="handleLogin()" id="btn-submit">信箱登入</button>
+                </div>
+                <div class="toggle-mode">
+                    <span id="toggle-text" style="color: var(--text-muted); font-weight: normal;">還不是校園王？</span>
+                    <span onclick="registerAccount()" id="toggle-btn">立即加入行列</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/firebase.js"></script>
+    <script>
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                window.location.href = 'app.html';
+            } else {
+                document.getElementById('landing-page').style.opacity = '1';
+            }
+        });
+
+        function handleLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const remember = document.getElementById('chk-remember').checked;
+
+            if (!email || !password) {
+                alert("請輸入 Email 和密碼");
+                return;
+            }
+
+            const persistenceType = remember
+                ? firebase.auth.Auth.Persistence.LOCAL
+                : firebase.auth.Auth.Persistence.SESSION;
+
+            auth.setPersistence(persistenceType)
+                .then(() => {
+                    return auth.signInWithEmailAndPassword(email, password);
+                })
+                .catch(e => alert("登入失敗：" + e.message));
+        }
+
+        function registerAccount() {
+            const email = prompt("請輸入要註冊的 Email 信箱：");
+            if (email) {
+                const password = prompt("請設定密碼 (至少6個字元)：");
+                if (password) {
+                    auth.createUserWithEmailAndPassword(email, password)
+                        .then(() => alert("🎉 註冊成功！系統將自動登入。"))
+                        .catch(e => alert("註冊失敗：" + e.message));
+                }
+            }
+        }
+
+        function loginWithGoogle() { auth.signInWithPopup(provider).catch(e => alert("Google 登入錯誤：" + e.message)); }
+        function loginAnonymously() { auth.signInAnonymously().catch(e => alert("匿名登入錯誤：" + e.message)); }
+
+        function forgotPassword() {
+            const email = document.getElementById('email').value;
+            if (!email) {
+                alert("請先在上方輸入您的 Email 信箱，系統才能寄送重設信給您！");
+                return;
+            }
+            if (confirm(`確定要寄送重設密碼信件至 ${email} 嗎？`)) {
+                auth.sendPasswordResetEmail(email)
+                    .then(() => alert("📧 重設信已寄出！請檢查信箱。"))
+                    .catch(e => alert("發送失敗：" + e.message));
+            }
+        }
+
+        function openLoginModal() {
+            document.querySelector('.right-panel').classList.add('show-modal');
+        }
+
+        function closeLoginModal() {
+            document.querySelector('.right-panel').classList.remove('show-modal');
+        }
+    </script>
+</body>
+</html>

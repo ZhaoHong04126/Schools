@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+	<title>大學神隊友</title>
+	<link rel="manifest" href="manifest.json">
+	<meta name="theme-color" content="#4a90e2">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+	<meta name="apple-mobile-web-app-title" content="大學神隊友">
+	<link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2921/2921222.png" type="image/png">
+
+	<link rel="stylesheet" href="css/base.css">
+	<link rel="stylesheet" href="css/layout.css">
+	<link rel="stylesheet" href="css/components.css">
+	<link rel="stylesheet" href="css/dashboard.css">
+	<link rel="stylesheet" href="css/calendar.css">
+	<link rel="stylesheet" href="css/settings.css">
+	<link rel="stylesheet" href="css/feedback-admin.css">
+
+	<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+</head>
+
+<body>
+	<nav id="top-bar" style="display: none;">
+		<div style="display: flex; align-items: center; gap: 15px;">
+			<button id="mobile-menu-btn" onclick="toggleMobileMenu()" style="background: transparent; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 5px;">☰</button>
+			<h1 id="app-title" style="margin: 0; font-size: 1.3rem; font-weight: bold; letter-spacing: 1px;">課表</h1>
+		</div>
+
+		<div style="display: flex; align-items: center;">
+			<button id="nav-notifications-btn" onclick="switchTab('notifications')" style="background: transparent; border: none; color: white; font-size: 1.3rem; cursor: pointer; padding: 10px; position: relative;" title="通知中心">
+				🔔 <span id="notification-badge" style="display: none; position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; background-color: #e74c3c; border-radius: 50%;"></span>
+			</button>
+		</div>
+	</nav>
+	<div id="sidebar-overlay" onclick="toggleMobileMenu()"></div>
+
+	<div class="dashboard-container" style="display: none;">
+		<aside class="desktop-sidebar" id="sidebar">
+			<!-- 學期選擇器 -->
+			<div style="text-align: left; background: #f8f9fa; padding: 12px; border-radius: 12px; border: 1px solid #eee; margin-top: 5px;">
+				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+					<span style="font-size: 0.8rem; color: #888; font-weight: bold;">📅 目前學期</span>
+					<div style="display: flex; gap: 2px;">
+						<button onclick="editSemester()" style="background: transparent; border: none; cursor: pointer; padding: 2px; font-size: 0.9rem;" title="重新命名">✏️</button>
+						<button onclick="deleteSemester()" style="background: transparent; border: none; cursor: pointer; padding: 2px; font-size: 0.9rem;" title="刪除學期">🗑️</button>
+						<button onclick="addNewSemester()" style="background: transparent; border: none; cursor: pointer; padding: 2px; font-size: 0.9rem;" title="新增學期">➕</button>
+					</div>
+				</div>
+				<select id="semester-select" class="semester-select" onchange="switchSemester()" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ddd; font-weight: bold; color: var(--primary); font-size: 1rem; background: white; outline: none; cursor: pointer;"></select>
+				<div id="semester-status-text" style="font-size: 0.8rem; margin-top: 8px; color: #666; text-align: center;"> </div>
+			</div>
+			<!-- 模組選擇器 -->
+			<nav class="sidebar-nav">
+				<div style="font-size: 0.75rem; color: #999; margin: 10px 0 5px 10px; font-weight: bold;">主選單</div>
+				<button class="nav-item active" id="btn-schedule" onclick="switchTab('schedule')">📅 智慧課表</button>
+				<button class="nav-item" id="btn-accounting" onclick="switchTab('accounting')">💰 學期記帳</button>
+				<button class="nav-item" id="btn-calendar" onclick="switchTab('calendar')">🗓️ 行事曆</button>
+
+				<div style="font-size: 0.75rem; color: #999; margin: 15px 0 5px 10px; font-weight: bold;">小工具</div>
+				<button class="nav-item" id="btn-lottery" onclick="switchTab('lottery')">🎰 幸運籤筒</button>
+				<button class="nav-item" id="btn-self-study" onclick="switchTab('self-study')">🏃 自主學習活動</button>
+				<button class="nav-item" id="btn-grade-calc" onclick="switchTab('grade-calc')">🧮 配分筆記</button>
+				<button class="nav-item" id="btn-grade-manager" onclick="switchTab('grade-manager')">💯 成績與學分</button>
+				<button class="nav-item" id="btn-homework" onclick="switchTab('homework')">🎒 作業與小考</button>
+				<button class="nav-item" id="btn-anniversary" onclick="switchTab('anniversary')">💝 紀念日倒數</button>
+
+				<div style="font-size: 0.75rem; color: #999; margin: 15px 0 5px 10px; font-weight: bold;">系統</div>
+				<button onclick="document.getElementById('feedback-modal').style.display='flex'">回報問題</button>
+				<button class="nav-item" id="btn-settings" onclick="switchTab('settings')">⚙️ 個人設定</button>
+				<div id="admin-nav-section" style="display: none;">
+					<div style="font-size: 0.75rem; color: #e74c3c; margin: 15px 0 5px 10px; font-weight: bold;">管理者</div>
+					<button class="nav-item" id="btn-admin" onclick="switchTab('admin')">👑 系統管理台</button>
+					<button class="nav-item" id="btn-admin-feedback" onclick="switchTab('admin-feedback'); loadAdminFeedbacks();">💬 回饋管理</button>
+				</div>
+			</nav>
+		</aside>
+		<main class="main-content" id="main-content-area">
+		<!-- 使用者 -->
+			<!-- 首頁(課程表) -->
+			<div id="view-schedule" style="display: none;">
+				<div class="week-tabs" style="margin-bottom: 20px;">
+					<button class="tab-btn active" onclick="switchScheduleMode('daily')" id="btn-sch-daily">📅 本日課程</button>
+					<button class="tab-btn" onclick="switchScheduleMode('weekly')" id="btn-sch-weekly">🗓️ 週課表</button>
+				</div>
+				<div id="subview-sch-daily" style="display: block;">
+					<div class="card">
+						<div class="week-tabs">
+							<button class="tab-btn" onclick="switchDay(1)" id="tab-1">一</button>
+							<button class="tab-btn" onclick="switchDay(2)" id="tab-2">二</button>
+							<button class="tab-btn" onclick="switchDay(3)" id="tab-3">三</button>
+							<button class="tab-btn" onclick="switchDay(4)" id="tab-4">四</button>
+							<button class="tab-btn" onclick="switchDay(5)" id="tab-5">五</button>
+							<button class="tab-btn" onclick="switchDay(6)" id="tab-6">六</button>
+							<button class="tab-btn" onclick="switchDay(0)" id="tab-0">日</button>
+						</div>
+						<h2 id="schedule-title">本日課程</h2>
+						<table id="schedule-table">
+							<thead>
+								<tr>
+									<th width="15%">節次</th>
+									<th width="20%">時間</th>
+									<th width="25%">科目</th>
+									<th width="20%">地點</th>
+									<th width="20%">老師</th>
+								</tr>
+							</thead>
+							<tbody id="schedule-body"> </tbody>
+						</table>
+						<button class="btn btn-add" onclick="openEditModal()">+ 編輯本日課程</button>
+					</div>
+				</div>
+				<div id="subview-sch-weekly" style="display: none;">
+					<div class="card">
+						<h2>📅 週課表
+							<div style="display: flex; gap: 8px;">
+								<button id="btn-toggle-sch-edit" class="btn-icon" onclick="toggleWeeklyEditMode()" style="font-size: 0.9rem; background: transparent; border: 1px solid #ddd; color: #888; transition: all 0.3s;">🔒 唯讀模式</button>
+								<button class="btn-icon" onclick="exportSchedule()" style="font-size: 0.9rem; background: transparent; border: 1px solid #ddd;">📷 存成圖片</button>
+							</div>
+						</h2>
+						<div style="width: 100%; overflow-x: auto; padding-bottom: 10px; -webkit-overflow-scrolling: touch;">
+							<table class="weekly-table">
+								<thead>
+									<tr>
+										<th style="width: 20px; background: #f8f9fa;">節</th>
+										<th style="width: 42px; background: #f8f9fa; font-size: 0.85rem; color: #666;">時間</th>
+										<th style="min-width: 45px;">一</th>
+										<th style="min-width: 45px;">二</th>
+										<th style="min-width: 45px;">三</th>
+										<th style="min-width: 45px;">四</th>
+										<th style="min-width: 45px;">五</th>
+										<th style="min-width: 45px; color:#e74c3c;">六</th>
+										<th style="min-width: 45px; color:#e74c3c;">日</th>
+									</tr>
+								</thead>
+								<tbody id="weekly-schedule-body"> </tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+			</div>
+			<!-- 抽籤筒 -->
+			<div id="view-lottery" style="display: none;">
+				<div class="card" style="text-align: center; padding: 30px 20px;">
+					<h2 style="justify-content: center; border:none; margin-bottom: 10px;">🎰 今天運氣如何？</h2>
+					<div id="lottery-result-box" style=" background: #f8f9fa; border: 2px dashed #ddd; border-radius: 12px; padding: 40px 20px; margin: 20px 0; min-height: 80px; display: flex; align-items: center; justify-content: center;">
+						<span id="lottery-result-text" style="font-size: 2rem; font-weight: bold; color: #aaa;">準備好了嗎？</span>
+					</div>
+					<button id="btn-draw" class="btn" style="width: 100%; padding: 15px; font-size: 1.2rem; background: var(--primary); box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);" onclick="startLottery()"> 🎲 開始抽籤 </button>
+				</div>
+				<div class="card">
+					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+						<h2 style="margin: 0; border: none;">📝 籤筒清單</h2>
+						<select id="lottery-category-select" onchange="switchLotteryCategory()" style="padding: 5px; border-radius: 6px; border: 1px solid #ddd;"> </select>
+					</div>
+					<div class="input-group" style="display: flex; gap: 10px;">
+						<input type="text" id="input-lottery-item" placeholder="新增選項 (例如: 麥當勞)" style="flex: 1;">
+						<button class="btn" onclick="addLotteryItem()" style="width: auto; background: #666;">+</button>
+					</div>
+					<div id="lottery-list" style="margin-top: 10px;"> </div>
+					<div style="margin-top: 20px; text-align: right;">
+						<button class="btn" onclick="addNewLotteryCategory()" style="background: transparent; color: var(--primary); border: 1px solid var(--primary); width: auto; font-size: 0.8rem;"> + 新增分類 </button>
+						<button class="btn" onclick="deleteLotteryCategory()" style="background: transparent; color: #e74c3c; border: 1px solid #e74c3c; width: auto; font-size: 0.8rem; margin-left: 5px;"> 🗑️ 刪除此分類 </button>
+					</div>
+				</div>
+			</div>
+			<!-- 行事曆 -->
+			<div id="view-calendar" style="display: none;">
+				<div class="week-tabs" style="margin-bottom: 20px;">
+					<button class="tab-btn active" onclick="switchCalendarTab('month')" id="btn-cal-month">🗓️ 月曆視圖</button>
+					<button class="tab-btn" onclick="switchCalendarTab('list')" id="btn-cal-list">📝 活動清單</button>
+				</div>
+				<div id="subview-cal-month" style="display: block;">
+					<div class="card">
+						<div class="calendar-header" style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px;">
+							<div style="display: flex; align-items: center; gap: 8px;">
+								<button class="btn-icon" onclick="changeMonth(-1)">◀</button>
+								<h3 id="calendar-month-year" style="margin:0; border:none; min-width: 100px; text-align: center;"></h3>
+								<button class="btn-icon" onclick="changeMonth(1)">▶</button>
+								<button class="btn" onclick="goToToday()" style="background: transparent; color: var(--primary); border: 1px solid var(--primary); padding: 6px 12px; font-size: 0.85rem; border-radius: 6px; margin-left: 5px;">今天</button>
+							</div>
+							<button id="btn-toggle-cal-edit" class="btn-icon" onclick="toggleCalendarEditMode()" style="font-size: 0.85rem; background: transparent; border: 1px solid #ddd; color: #888; transition: all 0.3s; padding: 6px 12px;">🔒 唯讀模式</button>
+						</div>
+						<div style="width: 100%; overflow-x: auto; padding-bottom: 10px; -webkit-overflow-scrolling: touch;">
+							<div class="calendar-grid" id="calendar-grid"> </div>
+						</div>
+						<button class="btn btn-add" onclick="openCalendarModal()" style="margin-top: 15px; display: none;">+ 新增活動</button>
+					</div>
+				</div>
+				<div id="subview-cal-list" style="display: none;">
+					<div class="card">
+						<h2>📅 行事曆</h2>
+						<div id="calendar-list" style="margin-bottom: 15px;">
+							<p style="color:#999; text-align:center;">載入中...</p>
+						</div>
+						<button class="btn btn-add" onclick="openCalendarModal()" style="display: none;">+ 新增活動</button>
+					</div>
+				</div>
+			</div>
+			<!-- 成績紀錄 -->
+			<div id="view-grade-manager" style="display: none;">
+				<div class="week-tabs" style="margin-bottom: 20px;">
+					<button class="tab-btn active" onclick="switchGradeTab('dashboard')" id="tab-grade-dashboard">📊 總覽</button>
+					<button class="tab-btn" onclick="switchGradeTab('exams')" id="tab-grade-exams">📝 考試成績</button>
+					<button class="tab-btn" onclick="switchGradeTab('list')" id="tab-grade-list">📄 成績單</button>
+					<button class="tab-btn" onclick="switchGradeTab('chart')" id="tab-grade-chart">📈 趨勢</button>
+					<button class="tab-btn" onclick="switchGradeTab('credits')" id="tab-grade-credits">🎓 學分</button>
+				</div>
+				<div id="subview-grade-dashboard" style="display: block;">
+					<div class="card" style="text-align: center; padding: 30px 20px;">
+						<h2 style="justify-content: center; border:none; margin-bottom: 20px;">🎓 本學期學業摘要</h2>
+						<div style="display: flex; justify-content: space-around; margin-bottom: 20px;">
+							<div style="flex: 1;">
+								<div style="font-size: 0.9rem; color: #666; margin-bottom: 5px;">加權平均</div>
+								<div id="dash-gpa" style="font-size: 2rem; font-weight: bold; color: var(--primary);"> 0.0 </div>
+							</div>
+							<div style="flex: 1; border-left: 1px solid #eee; border-right: 1px solid #eee;">
+								<div style="font-size: 0.9rem; color: #666; margin-bottom: 5px;">實得學分</div>
+								<div id="dash-credits" style="font-size: 2rem; font-weight: bold; color: #2ecc71;"> 0 </div>
+							</div>
+							<div style="flex: 1;">
+								<div style="font-size: 0.9rem; color: #666; margin-bottom: 5px;">不及格科目</div>
+								<div id="dash-failed" style="font-size: 2rem; font-weight: bold; color: #e74c3c;"> 0 </div>
+							</div>
+						</div>
+						<div style="display: flex; gap: 10px; margin-top: 20px;">
+							<button class="btn" onclick="switchGradeTab('exams')" style="flex:2; background:#e3f2fd; color:#1565c0;">📝 記考試</button>
+							<button class="btn" onclick="switchGradeTab('list')" style="flex:1; background:#e8f5e9; color:#2e7d32;">📊 算 GPA</button>
+						</div>
+					</div>
+				</div>
+				<div id="subview-grade-exams" style="display: none;">
+					<div class="card">
+						<h2>
+							<span>📝 考試成績</span>
+							<select id="exam-subject-select" style="font-size: 0.9rem; padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px;">
+								<option value="" disabled selected>選擇科目</option>
+							</select>
+						</h2>
+						<table id="exam-table">
+							<thead>
+								<tr>
+									<th width="20%">類型</th>
+									<th width="50%">測驗名稱</th>
+									<th width="30%">分數</th>
+								</tr>
+							</thead>
+							<tbody id="exam-body">
+								<tr>
+									<td colspan="3" class="no-class">👈 請先選擇科目</td>
+								</tr>
+							</tbody>
+						</table>
+						<div style="display: flex; gap: 10px; margin-top: 15px;">
+							<button class="btn btn-add" style="margin-top: 0; flex: 1;" onclick="openRegularModal()">+ 記平常考</button>
+							<button class="btn btn-add" style="margin-top: 0; flex: 1; background: #fff8e1; color: #f57f17;" onclick="openMidtermModal()">+ 記段考</button>
+						</div>
+					</div>
+				</div>
+				<div id="subview-grade-list" style="display: none;">
+					<div class="card">
+						<h2>📊 學期成績單</h2>
+						<table id="grade-table">
+							<thead>
+								<tr>
+									<th>科目</th>
+									<th class="uni-only">學分</th>
+									<th class="uni-only">實得</th>
+									<th>分數</th>
+								</tr>
+							</thead>
+							<tbody id="grade-body"></tbody>
+						</table>
+						<div style="margin-top: 15px; text-align: right; font-weight: bold; color: var(--primary);">
+							<span id="average-score" style="font-size: 1.1rem;">0.0</span>
+						</div>
+						<button class="btn btn-add" onclick="openGradeModal()">+ 編輯成績</button>
+					</div>
+				</div>
+				<div id="subview-grade-chart" style="display: none;">
+					<div class="card" style="height: 70vh; display: flex; flex-direction: column;">
+						<h2>📈 歷年成績趨勢</h2>
+						<div style="flex: 1; position: relative; min-height: 300px;">
+							<canvas id="gradeChart"></canvas>
+						</div>
+					</div>
+				</div>
+				<div id="subview-grade-credits" style="display: none;">
+					<div class="card">
+						<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+							<div>
+								<h2 style="margin: 0; border: none; padding: 0;">🎓 畢業進度</h2>
+								<div id="school-info-display" style="font-size: 0.9rem; color: var(--primary); margin-top: 4px; font-weight: bold;"> </div>
+							</div>
+							<button id="btn-edit-credits" class="btn" style="background: #666; padding: 6px 12px; font-size: 0.85rem; width: auto;" onclick="toggleCreditEdit()"> ⚙️ 設定標準 </button>
+						</div>
+						<div id="credits-view-mode">
+							<div id="credit-progress-container" style="margin-bottom: 20px;">
+								<h4 style="margin-bottom: 8px; display:flex; justify-content:space-between; font-size:1rem; color:#555;">
+									<span>畢業門檻達成率</span>
+									<span>
+										<span id="total-credits" style="color:var(--primary); font-weight:bold;">0</span> /
+										<span id="text-grad-target">128</span>
+									</span>
+								</h4>
+								<div style="background: #eee; border-radius: 10px; height: 16px; width: 100%; overflow: hidden; margin-bottom: 5px;">
+									<div id="credit-progress-bar" style="background: var(--primary); width: 0%; height: 100%; transition: width 0.8s ease-in-out;"> </div>
+								</div>
+							</div>
+							<hr style="border: 0; border-top: 1px dashed #ddd; margin-bottom: 20px;">
+							<div id="panel-credits-uni" style="display: block;">
+								<h4 style="color: #666; font-size: 1rem; margin-bottom: 15px;">📊 各模組詳細狀態</h4>
+								<div id="list-credits-uni"></div>
+							</div>
+						</div>
+						<div id="credits-edit-mode" style="display: none;">
+							<div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #bbdefb;">
+								<label style="font-weight:bold; color:#1565c0; font-size:0.9rem;">🎯 畢業標準設定</label>
+								<div style="margin-top:10px;">
+									<label style="font-size:0.85rem; color:#555;">畢業總學分目標</label>
+									<input type="number" id="edit-grad-target" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; box-sizing: border-box;">
+								</div>
+							</div>
+							<h5 style="margin: 0 0 10px 0; color: #666; border-left: 4px solid var(--primary); padding-left: 8px;">📚 學分模組管理</h5>
+							<div id="edit-settings-uni"></div>
+							<div style="margin-top: 20px; text-align: center;">
+								<button onclick="addNewCategory()" class="btn" style="width:auto; background:#558b2f; padding: 8px 20px; font-weight: bold; font-size: 0.9rem; display: inline-block; border-radius: 20px;">+ 新增學分模組</button>
+							</div>
+							<div style="display: flex; gap: 10px; margin-top: 25px; border-top: 1px solid #eee; padding-top: 15px;">
+								<button class="btn" onclick="saveCreditSettings()" style="flex: 2; background: var(--primary);">💾 儲存設定</button>
+								<button class="btn" onclick="toggleCreditEdit()" style="flex: 1; background: transparent; color: #888; border: 1px solid #ddd;">取消</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+			<!-- 自主學習 -->
+			<div id="view-self-study" style="display: none;">
+				<div class="card" style="text-align: center; padding: 30px 20px;">
+					<h2 style="justify-content: center; border:none; margin-bottom: 20px;">🏃 自主學習進度</h2>
+					<div style="display: flex; justify-content: space-around; margin-bottom: 20px;">
+						<div style="flex: 1;">
+							<div style="font-size: 0.9rem; color: #666; margin-bottom: 5px;">累計時數</div>
+							<div id="self-study-total-hours" style="font-size: 2rem; font-weight: bold; color: var(--primary);"> 0 </div>
+						</div>
+						<div style="flex: 1; border-left: 1px solid #eee; border-right: 1px solid #eee;">
+							<div style="font-size: 0.9rem; color: #666; margin-bottom: 5px;">可得學分</div>
+							<div id="self-study-credits" style="font-size: 2rem; font-weight: bold; color: #2ecc71;"> 0 </div>
+						</div>
+						<div style="flex: 1;">
+							<div style="font-size: 0.9rem; color: #666; margin-bottom: 5px;">距離下學分還需</div>
+							<div id="self-study-hours-left" style="font-size: 2rem; font-weight: bold; color: #e74c3c;"> 18 </div>
+						</div>
+					</div>
+					<button class="btn" onclick="syncSelfStudyToGrades()" style="background:#e8f5e9; color:#2e7d32; font-weight:bold;">🔄 結算並同步至成績單</button>
+					<div style="font-size: 0.8rem; color: #999; margin-top: 10px; display: flex; justify-content: center; align-items: center; gap: 8px;"> (每滿 <span id="text-self-study-rate">18</span> 小時可兌換 1 學分)
+						<button onclick="editSelfStudyRate()" style="background:#f0f0f0; border:1px solid #ddd; border-radius:4px; cursor:pointer; font-size:0.8rem; padding: 4px 8px; position:relative; z-index:999; transition:all 0.2s;" onmouseover="this.style.background='#e0e0e0'" onmouseout="this.style.background='#f0f0f0'" title="編輯兌換率">✏️ 編輯</button>
+					</div>
+				</div>
+				<div class="card">
+					<h2>📝 活動紀錄</h2>
+					<div id="self-study-list" style="min-height: 150px;"></div>
+					<button class="btn btn-add" onclick="openSelfStudyModal()">+ 新增活動紀錄</button>
+				</div>
+			</div>
+			<!-- 配分筆記 -->
+			<div id="view-grade-calc" style="display: none;">
+				<div class="card">
+					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+						<h2 style="margin: 0; border: none; padding: 0;">🧮 配分筆記</h2>
+						<button id="btn-toggle-gc-edit" class="btn-icon" onclick="toggleGradeCalcEditMode()"style="font-size: 0.85rem; background: transparent; border: 1px solid #ddd; color: #888; transition: all 0.3s; padding: 6px 12px;">🔒 唯讀模式</button>
+					</div>
+					<p style="color:#888; font-size: 0.85rem; margin-top: 5px; margin-bottom: 15px;">記錄各科教授的計分方式與目標分數。</p>
+					<div id="grade-calc-list" style="min-height: 200px;"></div>
+					<button id="btn-add-gc" class="btn btn-add" onclick="openGradeCalcModal()" style="display: none;">+ 新增計算筆記</button>
+				</div>
+			</div>
+			<!-- 作業成績 -->
+			<div id="view-homework" style="display: none;">
+				<div class="card">
+					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+						<h2 style="margin:0; border:none;">🎒 作業成績</h2>
+						<div id="homework-summary" style="font-size: 0.85rem; color: #666;">載入中...</div>
+					</div>
+					<div id="homework-list" style="min-height: 200px;"> </div>
+					<button class="btn btn-add" onclick="openHomeworkModal()">+ 新增作業</button>
+				</div>
+			</div>
+			<!-- 收支 -->
+			<div id="view-accounting" style="display: none;">
+				<div class="week-tabs" style="margin-bottom: 20px;">
+					<button class="tab-btn active" onclick="switchAccTab('summary')" id="btn-acc-summary">📊 摘要</button>
+					<button class="tab-btn" onclick="switchAccTab('details')" id="btn-acc-details">📝 明細</button>
+					<button class="tab-btn" onclick="switchAccTab('stats')" id="btn-acc-stats">📈 統計</button>
+					<button class="tab-btn" onclick="switchAccTab('accounts')" id="btn-acc-accounts">⚙️ 設定</button>
+				</div>
+				<div id="view-acc-summary" style="display: block;">
+					<div class="card" style="text-align: center; padding: 40px 20px;">
+						<h2 style="justify-content: center; border:none; margin-bottom: 30px;">💰 本學期收支總覽</h2>
+						<div style="display: flex; justify-content: space-around; margin-bottom: 30px;">
+							<div style="flex: 1;">
+								<div style="font-size: 0.9rem; color: #666; margin-bottom: 5px;">總收入</div>
+								<div id="acc-summary-income" style="font-size: 1.8rem; font-weight: bold; color: #2ecc71;">$0</div>
+							</div>
+							<div style="flex: 1; border-left: 1px solid #eee; border-right: 1px solid #eee;">
+								<div style="font-size: 0.9rem; color: #666; margin-bottom: 5px;">總支出</div>
+								<div id="acc-summary-expense" style="font-size: 1.8rem; font-weight: bold; color: #e74c3c;">$0</div>
+							</div>
+							<div style="flex: 1;">
+								<div style="font-size: 0.9rem; color: #666; margin-bottom: 5px;">結餘</div>
+								<div id="acc-summary-balance" style="font-size: 1.8rem; font-weight: bold; color: #333;">$0</div>
+							</div>
+						</div>
+						<button class="btn btn-add" onclick="openAccountingModal()" style="font-size: 1.1rem; padding: 15px;">+ 記一筆</button>
+					</div>
+				</div>
+				<div id="view-acc-details" style="display: none;">
+					<div class="card">
+						<h2 style="display: flex; justify-content: space-between; align-items: center;">
+							<span>📝 收支明細列表</span>
+							<button id="btn-toggle-acc-details-edit" class="btn-icon" onclick="toggleAccDetailsEditMode()" style="font-size: 0.85rem; background: transparent; border: 1px solid #ddd; color: #888; transition: all 0.3s; padding: 6px 12px;">🔒 唯讀模式</button>
+						</h2>
+						<div style="width: 100%; overflow-x: auto; padding-bottom: 10px; -webkit-overflow-scrolling: touch;">
+							<table id="accounting-table" style="min-width: 700px;">
+								<thead>
+									<tr>
+										<th width="15%">日期</th>
+										<th width="12%">分類</th>
+										<th width="23%">項目</th>
+										<th width="15%">支付方式</th>
+										<th width="15%">金額</th>
+										<th width="20%" id="th-acc-details-action" style="display: none;">更改/刪除</th>
+									</tr>
+								</thead>
+								<tbody id="accounting-list-body"></tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+				<div id="view-acc-stats" style="display: none;">
+					<div class="card" style="margin-bottom: 20px; display: flex; flex-direction: column;">
+						<h2>📈 每月收支趨勢</h2>
+						<div style="flex: 1; position: relative; min-height: 300px;">
+							<canvas id="accountingChart"></canvas>
+						</div>
+						<p style="text-align: center; color: #999; font-size: 0.8rem; margin-top: 10px;">(柱狀圖：收入/支出 | 折線圖：結餘)</p>
+					</div>
+					<div class="card" style="margin-bottom: 20px; display: flex; flex-direction: column;">
+						<h2>📊 各分類支出比例</h2>
+						<div style="flex: 1; position: relative; min-height: 250px;">
+							<canvas id="categoryChart"></canvas>
+						</div>
+						<p id="no-expense-msg" style="text-align: center; color: #999; font-size: 0.8rem; margin-top: 10px; display: none;">目前尚無支出紀錄</p>
+					</div>
+					<div class="card">
+						<h2>📅 每日總收支統計</h2>
+						<table class="daily-table">
+							<thead>
+								<tr>
+									<th>日期</th>
+									<th style="color:#2ecc71;">總收入</th>
+									<th style="color:#e74c3c;">總支出</th>
+									<th>淨收支</th>
+								</tr>
+							</thead>
+							<tbody id="daily-acc-body"></tbody>
+						</table>
+					</div>
+				</div>
+				<div id="view-acc-accounts" style="display: none;">
+					<div class="card">
+						<h2 style="display: flex; justify-content: space-between; align-items: center;">
+							<span>💳 帳戶餘額概況</span>
+							<button id="btn-toggle-acc-edit" class="btn-icon" onclick="toggleAccAccountsEditMode()" style="font-size: 0.85rem; background: transparent; border: 1px solid #ddd; color: #888; transition: all 0.3s; padding: 6px 12px;">🔒 唯讀模式</button>
+						</h2>
+						<div id="acc-accounts-list"> </div>
+						<button id="btn-add-payment-method" class="btn btn-add" onclick="addPaymentMethod()" style="display: none; margin-top: 10px;">+ 新增支付方式</button>
+					</div>
+					<div class="card" style="margin-top: 20px;">
+						<h2>📁 收支分類管理</h2>
+						<div id="acc-categories-list"></div>
+					</div>
+				</div>
+			</div>
+			<!-- 紀念日 -->
+			<div id="view-anniversary" style="display: none;">
+				<div class="card">
+					<h2>💝 紀念日 & 倒數</h2>
+					<div id="anniversary-list" style="min-height: 200px;"> </div>
+					<button class="btn btn-add" onclick="openAnniversaryModal()">+ 新增紀念日</button>
+				</div>
+			</div>
+			<!-- 通知 -->
+			<div id="view-notifications" style="display: none;">
+				<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--bg); padding-bottom: 10px; margin-bottom: 15px;">
+					<h2 style="margin: 0; border: none; padding: 0;">🔔 通知中心</h2>
+					<div style="display: flex; gap: 8px;">
+						<button id="btn-toggle-push" class="btn-icon" onclick="toggleSystemNotification()" style="font-size: 0.85rem; background: #e3f2fd; border: 1px solid #1565c0; color: #1565c0; transition: all 0.3s; padding: 6px 12px; border-radius: 4px;">開啟系統通知</button>
+						<button class="btn-icon" onclick="markNotificationsAsRead()" style="font-size: 0.85rem; background: transparent; border: 1px solid #1565c0; color: #1565c0; transition: all 0.3s; padding: 6px 12px; border-radius: 4px;">全部已讀</button>
+						<button class="btn-icon" onclick="clearAllNotifications()" style="font-size: 0.85rem; background: transparent; border: 1px solid #ddd; color: #888; transition: all 0.3s; padding: 6px 12px; border-radius: 4px;">清除全部</button>
+					</div>
+				</div>
+			</div>
+			<!-- 設定 -->
+			<div id="view-settings" style="display: none;">
+				<!-- 學期設定 -->
+				<div class="card">
+					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #f4f7f6;">
+						<h2 style="margin: 0; border: none; padding: 0;">📅 學期期間設定</h2>
+						<button id="btn-toggle-sem-edit" class="btn-icon" onclick="toggleSemesterEdit()" style="font-size: 0.85rem; background: transparent; border: 1px solid #ddd; color: #888; transition: all 0.3s; padding: 6px 12px;">🔒 唯讀模式</button>
+					</div>
+					<div id="semester-date-view-mode">
+						<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border);">
+							<span style="color:var(--text-sub);">學期開始</span>
+							<span id="text-sem-start" style="font-weight:bold; color:var(--text-main);">未設定</span>
+						</div>
+						<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); margin-bottom:15px;">
+							<span style="color:var(--text-sub);">學期結束</span>
+							<span id="text-sem-end" style="font-weight:bold; color:var(--text-main);">未設定</span>
+						</div>
+					</div>
+					<div id="semester-date-edit-mode" style="display: none;">
+						<div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+							<div class="input-group">
+								<label>學期開始日 (第 1 週)</label>
+								<input type="date" id="setting-sem-start" style="background:white;">
+							</div>
+							<div class="input-group" style="margin-bottom:0;">
+								<label>學期結束日</label>
+								<input type="date" id="setting-sem-end" style="background:white;">
+							</div>
+						</div>
+						<div style="display: flex; gap: 10px; margin-bottom: 15px;">
+							<button class="btn" onclick="saveSemesterDates()" style="flex: 2; background: var(--primary);">💾 儲存</button>
+							<button class="btn" onclick="toggleSemesterEdit()" style="flex: 1; background: transparent; color: #888; border: 1px solid #ddd;">取消</button>
+						</div>
+					</div>
+					<div id="semester-status-text" style="text-align: center; color: var(--primary); font-weight: bold; font-size: 0.9rem;"> </div>
+				</div>
+				<!-- 一般設定 -->
+				<div class="card">
+					<h2 style="display: flex; justify-content: space-between; align-items: center;">
+						<span>⚙️ 一般設定</span>
+						<button id="btn-toggle-general-edit" class="btn-icon" onclick="toggleGeneralSettingsEditMode()" style="font-size: 0.85rem; background: transparent; border: 1px solid #ddd; color: #888; transition: all 0.3s; padding: 6px 12px;">🔒 唯讀模式</button>
+					</h2>
+					<div class="settings-list">
+						<div class="settings-item" onclick="editSchoolInfo()">
+							<div><span class="settings-icon">🏫</span>學校與科系</div>
+							<span id="setting-school-info" class="settings-arrow">未設定</span>
+						</div>
+						<div class="settings-item" onclick="editTimeSettings()">
+							<div><span class="settings-icon">⏰</span>自訂各節次時程</div>
+							<span class="settings-arrow">➤</span>
+						</div>
+						<div class="settings-item" onclick="toggleTheme()">
+							<div><span class="settings-icon">🌙</span>深色模式</div>
+							<span id="theme-status" class="settings-arrow" style="font-size: 0.8rem; font-weight: bold;">OFF</span>
+						</div>
+					</div>
+				</div>
+				<!-- 帳號管理 -->
+				<div class="card">
+					<h2 style="color: var(--danger); border-bottom-color: #fff0f0; display: flex; justify-content: space-between; align-items: center;">
+						<span>🛡️ 帳號管理</span>
+						<button id="btn-toggle-account-edit" class="btn-icon" onclick="toggleAccountSettingsEditMode()" style="font-size: 0.85rem; background: transparent; border: 1px solid #ddd; color: #888; transition: all 0.3s; padding: 6px 12px;">🔒 唯讀模式</button>
+					</h2>
+					<div class="settings-list">
+						<div class="settings-item" onclick="logout()" style="color: var(--danger);">
+							<div><span class="settings-icon">🚪</span>登出帳號</div>
+						</div>
+					</div>
+					<div class="settings-item" onclick="deleteAccount()" style="color: #e74c3c; border-top: 1px dashed #eee;">
+						<div><span class="settings-icon">💀</span>註銷帳號 (永久刪除)</div>
+						<span class="settings-arrow">➤</span>
+					</div>
+				</div>
+				<!-- 備份與還原 -->
+				<div class="card">
+					<h2 style="display: flex; justify-content: space-between; align-items: center;">
+						<span>💾 資料備份與還原</span>
+						<button id="btn-toggle-backup-edit" class="btn-icon" onclick="toggleBackupEditMode()" style="font-size: 0.85rem; background: transparent; border: 1px solid #ddd; color: #888; transition: all 0.3s; padding: 6px 12px;">🔒 唯讀模式</button>
+					</h2>
+					<p style="font-size: 0.85rem; color: #888; margin-bottom: 12px; margin-top: 5px;">將所有學期紀錄打包成「專屬大學回憶包」下載，或從先前的備份還原。</p>
+					<div style="display: flex; gap: 10px; align-items: center;">
+						<button class="btn" onclick="exportDataToFile()" style="font-size: 0.85rem; padding: 6px 14px; width: auto; background: #2ecc71;">📥 匯出</button>
+						<button class="btn" onclick="triggerImport()" style="font-size: 0.85rem; padding: 6px 14px; width: auto; background: #3498db;">📤 匯入</button>
+						<input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="importDataFromFile(event)">
+					</div>
+				</div>
+			</div>
+		<!-- 管理者 -->
+			<!-- 回饋管理台 -->
+			<div id="view-admin-feedback" class="view-section" style="display: none;">
+				<h2>💬 使用者回饋管理台</h2>
+				<div class="admin-controls">
+					<button class="btn-secondary" onclick="loadAdminFeedbacks()">🔄 重新載入列表</button>
+				</div>
+				<div class="table-container">
+					<table class="data-table">
+						<thead>
+							<tr>
+								<th>時間</th>
+								<th>發送者 UID</th>
+								<th>類型</th>
+								<th>內容</th>
+								<th>狀態</th>
+								<th>操作</th>
+							</tr>
+						</thead>
+						<tbody id="admin-feedback-list"> </tbody>
+					</table>
+				</div>
+			</div>
+			<!-- 系統管理台 -->
+			<div id="view-admin" style="display: none;">
+				<style>
+					.admin-toggle-switch {
+						position: relative;
+						display: inline-block;
+						width: 46px;
+						height: 24px;
+						flex-shrink: 0;
+					}
+					.admin-toggle-switch input {
+						opacity: 0;
+						width: 0;
+						height: 0;
+					}
+					.admin-toggle-slider {
+						position: absolute;
+						cursor: pointer;
+						top: 0;
+						left: 0;
+						right: 0;
+						bottom: 0;
+						background-color: #ccc;
+						border-radius: 24px;
+						transition: .4s;
+					}
+					.admin-toggle-slider:before {
+						position: absolute;
+						content: '';
+						height: 18px;
+						width: 18px;
+						left: 3px;
+						bottom: 3px;
+						background-color: white;
+						border-radius: 50%;
+						transition: .4s;
+						box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+					}
+					.admin-toggle-switch input:checked+.admin-toggle-slider:before {
+						transform: translateX(22px);
+					}
+					.admin-toggle-switch input:checked+.admin-toggle-slider.admin-mode {
+						background-color: #3498db;
+						/* 藍色: 管理員用 */
+					}
+					.admin-toggle-switch input:checked+.admin-toggle-slider.public-mode {
+						background-color: #2ecc71;
+						/* 綠色: 公開用 */
+					}
+				</style>
+				<div class="card">
+					<h2 style="border-bottom-color: #fad390;">👑 系統管理台 (Admin Dashboard)</h2>
+					<p style="color: #888; font-size: 0.9rem; margin-top: 5px;">管理員您好，您可以在此掌控校園王系統的全域設定與公告。</p>
+					<div class="card" style="border: 2px solid #e74c3c; background: #fff5f5; margin-top: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(231, 76, 60, 0.1);">
+						<h3 style="color: #c0392b; margin: 0 0 10px 0; font-size: 1.2rem;">🚨 系統全域維護模式 (Kill Switch)</h3>
+						<p style="font-size: 0.9rem; color: #e74c3c; line-height: 1.5; margin-bottom: 15px;">開啟後，除了您的管理員帳號外，所有學生將被強制阻擋在「系統維護中」的畫面，無法操作任何功能。</p>
+						<button id="btn-maintenance-mode" class="btn" style="background: #e74c3c; width: 100%; font-weight: bold; font-size: 1.05rem;" onclick="toggleMaintenanceMode()">載入狀態中...</button>
+					</div>
+					<div class="card" style="border: 2px solid #f39c12; background: #fffcf3; margin-top: 20px; margin-bottom: 20px;">
+						<h3 style="color: #d35400; margin: 0 0 10px 0; font-size: 1.2rem;">⏱️ 預定停機維護公告</h3>
+						<p style="font-size: 0.9rem; color: #666; margin-bottom: 15px;">設定未來要關閉系統的時間區段。設定後，學生登入時會跳出提醒視窗，時間超過後自動隱藏。</p>
+						<div style="display: flex; gap: 10px; margin-bottom: 10px;">
+							<div class="input-group" style="flex: 1;">
+								<label>開始時間</label>
+								<input type="datetime-local" id="maintenance-start" class="login-input" style="background:white;">
+							</div>
+							<div class="input-group" style="flex: 1;">
+								<label>結束時間</label>
+								<input type="datetime-local" id="maintenance-end" class="login-input" style="background:white;">
+							</div>
+						</div>
+						<div class="input-group">
+							<label>公告內容</label>
+							<input type="text" id="maintenance-msg" class="login-input" placeholder="例如：系統將於此時段進行升級，期間將無法登入..." style="background:white;">
+						</div>
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+							<label style="display:flex; align-items:center; cursor:pointer; font-weight: bold; color: #d35400;">
+								<input type="checkbox" id="maintenance-enabled" style="width:auto; margin-right:8px; transform: scale(1.2);">啟用此維護公告
+							</label>
+							<button class="btn" style="background: #f39c12; width: auto; padding: 8px 20px;" onclick="saveMaintenanceSettings()">💾 發布設定</button>
+						</div>
+					</div>
+					<div class="admin-dashboard-grid">
+						<div class="admin-feature-card card-status">
+							<h3>📊 系統狀態</h3>
+							<div style="font-size: 0.85rem; color: #666; line-height: 1.6;">
+								<div>⚙️ 前端版本：<b>v3.8.0</b></div>
+								<div>🔥 Firebase 連線：<span style="color:#2ecc71; font-weight:bold;">正常</span></div>
+							</div>
+						</div>
+						<div class="admin-feature-card card-update" onclick="openUpdateLogManagerModal()">
+							<h3>🚀 更新顯示框管理</h3>
+							<p>編輯讓使用者重啟系統時看到的更新內容與版本號草稿。</p>
+						</div>
+						<div class="admin-feature-card card-news" onclick="openNewsManagerModal()">
+							<h3>📢 首頁動態發布</h3>
+							<p>新增或刪除在登入頁面顯示的最新系統公告與校園更新。</p>
+						</div>
+						<div class="admin-feature-card card-push" onclick="openBroadcastModal()">
+							<h3>📡 發送系統推播</h3>
+							<p>發送全域通知給所有使用者。此訊息會直接推播至通知中心。</p>
+						</div>
+						<div class="admin-feature-card card-module full-width-card">
+							<h3>🔧 模組功能開關 (分階段發布)</h3>
+							<p style="margin-bottom: 12px;">
+								【① 藍色開關】僅控制您自己(管理員)是否能看到並測試。<br>
+								【② 綠色開關】控制全站一般學生是否能正式使用。
+							</p>
+							<div style="border-top: 1px dashed #ddd; padding-top: 5px;">
+								<div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0 5px 0; border-bottom: 2px solid #eee; font-size: 0.85rem; color: #888; font-weight: bold; text-align: center;">
+									<div style="flex: 1; text-align: left;">模組名稱</div>
+									<div style="display: flex; gap: 15px; width: 110px; justify-content: center;">
+										<div style="width: 46px; color: #3498db;">① 測試</div>
+										<div style="width: 46px; color: #2ecc71;">② 公開</div>
+									</div>
+								</div>
+								<div id="admin-dual-switches-container"></div>
+							</div>
+						</div>
+					</div>
+					<div class="admin-dashboard-grid" style="margin-top: 25px;">
+						<div class="card" style="display: flex; flex-direction: column; border: 1px solid #eee; background: #fafafa; box-shadow: none;">
+							<h3 style="color: var(--primary); margin: 0 0 10px 0; font-size: 1.05rem; border-bottom: 2px dashed #ddd; padding-bottom: 8px;">
+								📢 目前的首頁動態
+							</h3>
+							<div id="admin-display-news" style="flex: 1; max-height: 350px; overflow-y: auto; padding-right: 5px;"></div>
+						</div>
+						<div class="card" style="display: flex; flex-direction: column; border: 1px solid #eee; background: #fafafa; box-shadow: none;">
+							<h3 style="color: #9b59b6; margin: 0 0 10px 0; font-size: 1.05rem; border-bottom: 2px dashed #ddd; padding-bottom: 8px;">
+								📡 已發送的系統推播
+							</h3>
+							<div id="admin-display-broadcasts" style="flex: 1; max-height: 350px; overflow-y: auto; padding-right: 5px;"></div>
+						</div>
+						<div class="card" style="display: flex; flex-direction: column; border: 1px solid #eee; background: #fafafa; box-shadow: none;">
+							<h3 style="color: #f39c12; margin: 0 0 10px 0; font-size: 1.05rem; border-bottom: 2px dashed #ddd; padding-bottom: 8px;">
+								🚀 更新顯示草稿
+							</h3>
+							<div id="admin-display-drafts" style="flex: 1; max-height: 350px; overflow-y: auto; padding-right: 5px;"></div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</main>
+	</div>
+
+<!-- 使用者 -->
+	<!-- 周課表使用 -->
+	<div id="schedule-modal" class="modal">
+		<div class="modal-content" style="width: 95%; max-width: 800px; height: 90vh; overflow-y: auto;">
+			<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+				<h3 style="margin:0;">📅 我的週課表</h3>
+				<div style="display:flex; gap:10px;">
+					<button class="btn-sm" onclick="exportScheduleImage()">📷 截圖</button>
+					<button class="btn-sm" onclick="closeScheduleModal()" style="background:#888;">關閉</button>
+				</div>
+			</div>
+			<div class="table-container">
+				<table id="course-table">
+					<thead>
+						<tr>
+							<th>節次</th>
+							<th style="font-size: 0.85rem; color: #666;">時間</th>
+							<th>一</th>
+							<th>二</th>
+							<th>三</th>
+							<th>四</th>
+							<th>五</th>
+							<th>六</th>
+							<th>日</th>
+						</tr>
+					</thead>
+					<tbody id="weekly-schedule-body"> </tbody>
+				</table>
+			</div>
+			<p style="text-align: center; color: #888; font-size: 0.9rem; margin-top: 10px;">點擊格子可編輯課程</p>
+		</div>
+	</div>
+	<!-- 自訂節次與時程 -->
+	<div id="period-time-modal" class="modal">
+		<div class="modal-content" style="text-align: left;">
+			<h3 style="text-align: center; margin-top:0;">⏱️ 節次與時程設定</h3>
+			<p style="text-align: center; color: #888; font-size: 0.85rem; margin-bottom: 15px;">自訂每一節課的名稱與起訖時間</p>
+			<div style="width: 100%; max-height: 50vh; overflow-y: auto; overflow-x: auto;">
+				<table style="width: 100%; border-collapse: collapse; min-width: 280px;">
+					<thead>
+						<tr>
+							<th style="width: 45px; text-align: center; padding-bottom: 8px;">節次</th>
+							<th style="text-align: center; padding-bottom: 8px;">開始時間</th>
+							<th style="width: 10px;"></th>
+							<th style="text-align: center; padding-bottom: 8px;">結束時間</th>
+							<th style="width: 30px; text-align: center; padding-bottom: 8px;">操作</th>
+						</tr>
+					</thead>
+					<tbody id="period-time-container"></tbody>
+				</table>
+			</div>
+			<button class="btn" style="width: 100%; background: #2ecc71; margin-top: 15px; margin-bottom: 15px;" onclick="addCustomPeriodRow()">+ 新增一節課</button>
+			<div style="display: flex; gap: 10px;">
+				<button class="btn" style="flex: 1; background: var(--primary); margin: 0;" onclick="savePeriodTimeSettings()">💾 儲存設定</button>
+				<button class="btn" style="flex: 1; background: transparent; color: #666; border: 1px solid #ddd; margin: 0;" onclick="closePeriodTimeModal()">取消</button>
+			</div>
+		</div>
+	</div>
+	<!-- ✏️ 編輯課程 -->
+	<div id="course-modal" class="modal">
+		<div class="modal-content" style="text-align: left;">
+			<h3 style="text-align: center; margin-top:0;">✏️ 編輯課程</h3>
+			<div id="current-course-list" style="margin-bottom: 20px; max-height: 150px; overflow-y: auto;"></div>
+			<hr style="border:0; border-top:1px dashed #ddd; margin: 15px 0;">
+			<h4 style="margin: 0 0 10px 0; color: var(--primary);">新增一堂課(至少輸入科目與時間)</h4>
+			<div class="input-group">
+				<label>節次區間 (起始 - 結束)</label>
+				<div style="display: flex; gap: 10px; align-items: center;">
+					<input type="text" id="input-period-start" class="login-input" placeholder="起始 (如: 1)" style="flex: 1; margin-bottom: 0; text-align: center;">
+					<span style="color: #999; font-weight: bold;">至</span>
+					<input type="text" id="input-period-end" class="login-input" placeholder="結束 (如: 3)" style="flex: 1; margin-bottom: 0; text-align: center;">
+				</div>
+				<div style="font-size: 0.8rem; color: #999; margin-top: 4px;">※ 若只有一節課，右邊免填</div>
+			</div>
+			<div class="input-group">
+				<label>科目</label>
+				<input type="text" id="input-subject" placeholder="輸入科目...">
+			</div>
+			<div class="input-group">
+				<label>地點</label>
+				<input type="text" id="input-room" placeholder="輸入地點...">
+			</div>
+			<div class="input-group">
+				<label>老師</label>
+				<input type="text" id="input-teacher" placeholder="輸入老師...">
+			</div>
+			<div class="input-group">
+				<label>標記顏色 (選填)</label>
+				<div id="color-swatches" style="display: flex; gap: 10px; margin-top: 5px; flex-wrap: wrap;">
+					<div class="color-swatch selected" style="background:#ffffff; border:1px solid #ddd;" onclick="selectColor('#ffffff', this)" title="預設"></div>
+					<div class="color-swatch" style="background:#ffcdd2;" onclick="selectColor('#ffcdd2', this)"></div>
+					<div class="color-swatch" style="background:#ffe0b2;" onclick="selectColor('#ffe0b2', this)"></div>
+					<div class="color-swatch" style="background:#fff9c4;" onclick="selectColor('#fff9c4', this)"></div>
+					<div class="color-swatch" style="background:#c8e6c9;" onclick="selectColor('#c8e6c9', this)"></div>
+					<div class="color-swatch" style="background:#bbdefb;" onclick="selectColor('#bbdefb', this)"></div>
+					<div class="color-swatch" style="background:#e1bee7;" onclick="selectColor('#e1bee7', this)"></div>
+				</div>
+				<input type="hidden" id="input-color" value="#ffffff">
+			</div>
+
+			<button id="btn-add-course" class="btn" style="width: 100%; background: #333;" onclick="addCourse()">+ 加入清單</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeEditModal()">關閉</button>
+		</div>
+	</div>
+	<!-- 📅 新增活動 -->
+	<div id="calendar-modal" class="modal">
+		<div class="modal-content" style="text-align: left;">
+			<h3 id="cal-modal-title" style="text-align: center; margin-top:0;">📅 新增活動</h3>
+			<div class="input-group">
+				<label>日期區間</label>
+				<div style="display:flex; gap:10px;">
+					<div style="flex:1;">
+						<label style="font-size:0.8rem; color:#888; margin-bottom:2px;">起始日</label>
+						<input type="date" id="input-cal-date" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; margin-bottom:0;">
+					</div>
+					<div style="flex:1;">
+						<label style="font-size:0.8rem; color:#888; margin-bottom:2px;">結束日 (選填)</label>
+						<input type="date" id="input-cal-end-date" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; margin-bottom:0;">
+					</div>
+				</div>
+			</div>
+			<div class="input-group" style="margin-top: 15px;">
+				<label style="display:flex; align-items:center; cursor:pointer; margin-bottom: 8px;">
+					<input type="checkbox" id="input-cal-allday" checked onchange="toggleCalTimeInput()" style="width:auto; margin-right:8px; transform: scale(1.2);">
+					全天活動
+				</label>
+				<div id="cal-time-inputs" style="display: none; gap: 10px;">
+					<div style="flex:1;">
+						<label style="font-size:0.8rem; margin-bottom:2px;">開始時間</label>
+						<input type="time" id="input-cal-start" class="login-input" style="background:white; margin-bottom:0;">
+					</div>
+					<div style="flex:1;">
+						<label style="font-size:0.8rem; margin-bottom:2px;">結束時間</label>
+						<input type="time" id="input-cal-end" class="login-input" style="background:white; margin-bottom:0;">
+					</div>
+				</div>
+			</div>
+			<div class="input-group">
+				<label>活動名稱</label>
+				<input type="text" id="input-cal-title" placeholder="例如：期末考週、畢業旅行...">
+			</div>
+			<button id="btn-save-cal" class="btn" style="width: 100%; background: #333;" onclick="addCalendarEvent()">+ 加入</button>
+			<button id="btn-del-cal" class="btn" style="width: 100%; margin-top: 10px; background: #ffebee; color: #e74c3c; border: 1px solid #e74c3c; display: none;" onclick="deleteCalendarEventFromModal()">🗑️ 刪除此活動</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeCalendarModal()">關閉</button>
+		</div>
+	</div>
+	<!-- 🏃 新增活動紀錄(自主活動) -->
+	<div id="self-study-modal" class="modal">
+		<div class="modal-content" style="text-align: left;">
+			<h3 id="modal-ss-title" style="text-align: center; margin-top:0;">🏃 新增活動紀錄</h3>
+			<div class="input-group">
+				<label>活動名稱</label>
+				<input type="text" id="input-ss-name" placeholder="例如：校園講座、志工服務">
+			</div>
+			<div class="input-group">
+				<label>活動地點</label>
+				<input type="text" id="input-ss-location" placeholder="例如：大禮堂">
+			</div>
+			<div class="input-group">
+				<label>日期</label>
+				<input type="date" id="input-ss-date">
+			</div>
+			<div class="input-group">
+				<label>獲得時數</label>
+				<input type="number" id="input-ss-hours" placeholder="例如：2">
+			</div>
+			<button id="btn-save-ss" class="btn" style="width: 100%; background: var(--primary);" onclick="addSelfStudyActivity()">+ 儲存</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeSelfStudyModal()">取消</button>
+		</div>
+	</div>
+	<!-- 📝 新增平常考 -->
+	<div id="regular-exam-modal" class="modal">
+		<div class="modal-content" style="text-align: left;">
+			<h3 style="text-align: center; margin-top:0;">📝 新增平常考</h3>
+			<p style="text-align: center; color: #666;">科目：
+				<span id="modal-regular-subject-name" style="font-weight: bold; color: var(--primary);"></span>
+			</p>
+			<div class="input-group">
+				<label>測驗名稱</label>
+				<input type="text" id="input-regular-name" placeholder="例如：第一次小考、Unit 1">
+			</div>
+			<div class="input-group">
+				<label>分數</label>
+				<input type="number" id="input-regular-score" placeholder="例如：85">
+			</div>
+			<button class="btn" style="width: 100%; background: #333;" onclick="addRegularExam()">+ 確定新增</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeRegularModal()">關閉</button>
+		</div>
+	</div>
+	<!-- 🏆 新增段考 -->
+	<div id="midterm-exam-modal" class="modal">
+		<div class="modal-content" style="text-align: left;">
+			<h3 style="text-align: center; margin-top:0;">🏆 新增段考</h3>
+			<p style="text-align: center; color: #666;">科目：
+				<span id="modal-midterm-subject-name" style="font-weight: bold; color: var(--primary);"></span>
+			</p>
+			<div class="input-group">
+				<label>段考名稱</label>
+				<input type="text" id="input-midterm-name" placeholder="例如：第一次段考、期中考">
+			</div>
+			<div class="input-group">
+				<label>分數</label>
+				<input type="number" id="input-midterm-score" placeholder="例如：88">
+			</div>
+			<button class="btn" style="width: 100%; background: #333;" onclick="addMidtermExam()">+ 確定新增</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeMidtermModal()">關閉</button>
+		</div>
+	</div>
+	<!-- 📊 編輯成績 -->
+	<div id="grade-modal" class="modal">
+		<div class="modal-content" style="text-align: left;">
+			<h3 style="text-align: center; margin-top:0;">📊 編輯成績</h3>
+			<div id="current-grade-list" style="margin-bottom: 20px; max-height: 150px; overflow-y: auto;"></div>
+			<hr style="border:0; border-top:1px dashed #ddd; margin: 15px 0;">
+			<h4 style="margin: 0 0 10px 0; color: var(--primary);">新增一科</h4>
+			<div class="input-group" id="group-grade-subject">
+				<label>科目名稱</label>
+				<div style="display: flex; gap: 8px;">
+					<select id="input-grade-subject-select" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem;">
+						<option value="" disabled selected>請先選擇科目</option>
+					</select>
+					<input type="text" id="input-grade-subject-text" style="flex: 1; display: none;" placeholder="請輸入科目名稱...">
+					<button class="btn" id="btn-toggle-input" onclick="toggleGradeInputMode()" style="width: auto; padding: 8px 12px; background: #666; margin-right: 10px;" title="切換輸入模式">✏️</button>
+				</div>
+			</div>
+			<div class="input-group" style="margin-bottom: 12px; padding-left: 2px;">
+				<label style="display:flex; align-items:center; cursor:pointer; margin-bottom: 0; color: #555; font-size: 0.95rem;">
+					<input type="checkbox" id="input-grade-self-study" onchange="toggleSelfStudyMode()" style="width:auto; margin-right:8px; cursor:pointer;">自主學習
+					<span style="color:#888; font-size:0.85rem; margin-left: 5px;">(僅計學分，不計成績)</span>
+				</label>
+			</div>
+			<div class="input-group" id="group-grade-cat-nature">
+				<label>課程歸類 & 修別</label>
+				<div style="display: flex; gap: 8px;">
+					<select id="input-grade-category" style="flex: 2; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
+						<option value="" disabled selected>載入中...</option>
+					</select>
+					<select id="input-grade-nature" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
+						<option value="必修">必修</option>
+						<option value="選修">選修</option>
+						<option value="必選修">必選修</option>
+					</select>
+				</div>
+			</div>
+			<div class="input-group" id="input-credit-group">
+				<label>學分</label>
+				<input type="number" id="input-grade-credit" placeholder="例如：3" value="1">
+			</div>
+			<div class="input-group" id="group-grade-score">
+				<label>分數</label>
+				<input type="number" id="input-grade-score" placeholder="例如：85">
+			</div>
+			<button id="btn-add-grade" class="btn" style="width: 100%; background: #333;" onclick="addGrade()">+ 加入成績單</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeGradeModal()">關閉</button>
+		</div>
+	</div>
+	<!-- ➕ 新增計算筆記 -->
+	<div id="grade-calc-modal" class="modal">
+		<div class="modal-content" style="text-align: left;">
+			<h3 id="grade-calc-modal-title" style="text-align: center; margin-top:0;">➕ 新增計算筆記</h3>
+			<div class="input-group">
+				<label>科目</label>
+				<div style="display: flex; gap: 8px;">
+					<select id="input-gc-subject-select" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem;">
+						<option value="" disabled selected>請選擇科目</option>
+					</select>
+					<input type="text" id="input-gc-subject-text" style="flex: 1; display: none;" placeholder="輸入科目名稱...">
+					<button class="btn" id="btn-toggle-gc-input" onclick="toggleGradeCalcSubjectMode()" style="width: auto; padding: 8px 12px; background: #666;" title="切換 自動/手寫">✏️</button>
+				</div>
+			</div>
+			<div class="input-group" style="margin-bottom: 5px;">
+				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+					<label style="margin-bottom: 0;">項目 / 配分 (至少要一項)</label>
+					<button class="btn" onclick="addGradeCalcFormulaInput()" style="background: transparent; color: var(--primary); border: 1px solid var(--primary); width: auto; padding: 4px 10px; font-size: 0.8rem; border-radius: 6px; cursor: pointer;">+ 新增項目</button>
+				</div>
+				<div id="gc-formula-container" style="display: flex; flex-direction: column;"> </div>
+			</div>
+			<div class="input-group" style="margin-top: 10px; margin-bottom: 12px;">
+				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+					<label style="margin-bottom: 0;">補充說明 (選填)</label>
+					<button class="btn" onclick="addGradeCalcRemarkInput()" style="background: transparent; color: var(--primary); border: 1px solid var(--primary); width: auto; padding: 4px 10px; font-size: 0.8rem; border-radius: 6px; cursor: pointer;">+ 新增說明</button>
+				</div>
+				<div id="gc-remark-container" style="display: flex; flex-direction: column;"> </div>
+			</div>
+			<button id="btn-save-gc" class="btn" style="width: 100%; background: var(--primary);" onclick="saveGradeCalcNote()">+ 儲存</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeGradeCalcModal()">取消</button>
+		</div>
+	</div>
+	<!-- 🎒 新增作業 -->
+	<div id="homework-modal" class="modal">
+		<div class="modal-content" style="text-align: left;">
+			<h3 id="modal-hw-title" style="text-align: center; margin-top:0;">🎒 新增作業</h3>
+			<div class="input-group">
+				<label>科目</label>
+				<div style="display: flex; gap: 8px;">
+					<select id="input-hw-subject-select" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem;">
+						<option value="" disabled selected>請選擇科目</option>
+					</select>
+					<input type="text" id="input-hw-subject-text" style="flex: 1; display: none;" placeholder="輸入科目名稱...">
+					<button class="btn" id="btn-toggle-hw-input" onclick="toggleHomeworkSubjectMode()" style="width: auto; padding: 8px 12px; background: #666;" title="切換 自動/手寫">✏️</button>
+				</div>
+			</div>
+			<div class="input-group">
+				<label>作業名稱</label>
+				<input type="text" id="input-hw-title" placeholder="例如：習題 1-1">
+			</div>
+			<div class="input-group">
+				<label>繳交日期</label>
+				<input type="date" id="input-hw-date">
+			</div>
+			<div style="display: flex; gap: 10px;">
+				<div class="input-group" style="flex:1;">
+					<label>得分 (選填)</label>
+					<input type="number" id="input-hw-score" placeholder="尚未批改">
+				</div>
+				<div class="input-group" style="flex:1;">
+					<label>滿分</label>
+					<input type="number" id="input-hw-total" value="100">
+				</div>
+			</div>
+			<button id="btn-save-hw" class="btn" style="width: 100%; background: var(--primary);" onclick="addHomework()">+ 儲存</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;"onclick="closeHomeworkModal()">取消</button>
+		</div>
+	</div>
+	<!-- 💰 新增收支紀錄 -->
+	<div id="accounting-modal" class="modal">
+		<div class="modal-content" style="text-align: left;">
+			<h3 style="text-align: center; margin-top:0;">💰 新增收支紀錄</h3>
+			<div class="input-group">
+				<label>類型</label>
+				<select id="input-acc-type" class="login-input" style="background:white;" onchange="toggleAccType()">
+					<option value="expense">💸 支出</option>
+					<option value="income">💰 收入</option>
+					<option value="transfer">🔁 轉帳</option>
+				</select>
+			</div>
+			<div class="input-group">
+				<label>日期</label>
+				<input type="date" id="input-acc-date">
+			</div>
+			<div class="input-group" id="acc-multi-items-wrapper">
+				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+					<label style="margin-bottom: 0;">項目說明 & 分類 & 金額</label>
+					<button class="btn" id="btn-add-acc-row" onclick="appendAccItemRow()" style="background: transparent; color: var(--primary); border: 1px solid var(--primary); width: auto; padding: 4px 10px; font-size: 0.8rem; border-radius: 6px; cursor: pointer;">+ 新增另一筆</button>
+				</div>
+				<div style="width: 100%; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch;">
+					<div id="acc-items-container" style="display: flex; flex-direction: column; gap: 8px; min-width: 450px;"> </div>
+				</div>
+				<div style="font-size: 0.8rem; color: #999; margin-top: 8px;">※ 若需新增或刪除分類，請至「⚙️ 設定」頁面設定</div>
+			</div>
+			<div class="input-group">
+				<label id="label-acc-method">支付方式</label>
+				<select id="input-acc-method" class="login-input" style="background:white;"> </select>
+			</div>
+			<div class="input-group" id="group-acc-to-method" style="display: none;">
+				<label>轉入帳戶 (存入)</label>
+				<select id="input-acc-to-method" class="login-input" style="background:white;"> </select>
+			</div>
+			<button id="btn-save-acc" class="btn" style="width: 100%; background: #333;" onclick="addTransaction()">+ 確定新增</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeAccountingModal()">關閉</button>
+		</div>
+	</div>
+	<!-- 📅 新增紀念日 -->
+	<div id="anniversary-modal" class="modal">
+		<div class="modal-content">
+			<h3 style="text-align: center; margin-top:0;">📅 新增紀念日</h3>
+			<div class="input-group">
+				<label>標題 (例如：交往、生日)</label>
+				<input type="text" id="input-anniv-title" class="login-input" placeholder="輸入標題...">
+			</div>
+			<div class="input-group">
+				<label>日期</label>
+				<input type="date" id="input-anniv-date" class="login-input">
+			</div>
+			<button class="btn" style="width: 100%; background: var(--primary);" onclick="addAnniversary()">+ 確定新增</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeAnniversaryModal()">取消</button>
+		</div>
+	</div>
+	<!-- 回饋/回報 表 -->
+	<div id="feedback-modal" class="modal" style="display: none;">
+		<div class="modal-content">
+			<span class="close-btn" onclick="document.getElementById('feedback-modal').style.display='none'">&times;</span>
+			<h2>💡 意見回饋 / 🐞 問題回報</h2>
+			<div class="form-group">
+				<label>類型：</label>
+				<select id="feedback-type">
+					<option value="bug">🐞 系統 Bug 回報</option>
+					<option value="suggestion">💡 新功能建議</option>
+					<option value="other">💬 其他想說的話</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label>詳細內容：</label>
+				<textarea id="feedback-content" rows="4" placeholder="請詳細描述您遇到的問題或建議..."></textarea>
+			</div>
+			<button class="btn-primary" onclick="submitFeedback()">送出回饋</button>
+		</div>
+	</div>
+	<!-- ⚙️ 自訂學分兌換率(自主學習) -->
+	<div id="self-study-rate-modal" class="modal">
+		<div class="modal-content" style="text-align: left; max-width: 400px;">
+			<h3 style="text-align: center; margin-top:0;">⚙️ 自訂學分兌換率</h3>
+			<p style="text-align: center; color: #888; font-size: 0.85rem; margin-bottom: 15px;">設定每獲得多少小時，可以兌換 1 學分。
+			</p>
+			<div class="input-group">
+				<label>兌換 1 學分所需時數</label>
+				<input type="number" id="input-ss-rate" class="login-input" placeholder="例如：18" min="1" step="1">
+			</div>
+			<button class="btn" style="width: 100%; background: var(--primary);" onclick="saveSelfStudyRate()">💾 儲存設定</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeSelfStudyRateModal()">取消</button>
+		</div>
+	</div>
+	<!-- 提示框 -->
+	<div id="custom-modal" class="modal" style="z-index: 9999;">
+		<div class="modal-content" style="max-width: 320px; text-align: center; padding: 25px;">
+			<h3 id="custom-modal-title" style="margin-top: 0; color: var(--primary); font-size: 1.3rem;">提示</h3>
+			<p id="custom-modal-message" style="margin: 20px 0; color: #555; line-height: 1.6; font-size: 1rem;"></p>
+			<div id="custom-modal-input-container" style="display:none; margin-top:15px; margin-bottom: 20px;">
+				<input type="text" id="custom-modal-input" class="login-input" style="width:100%; text-align: center;">
+			</div>
+			<div id="custom-modal-actions" style="display: flex; gap: 15px; justify-content: center; margin-top: 25px;"> </div>
+		</div>
+	</div>
+
+<!-- 管理員 -->
+	<!-- 📢 管理首頁動態 -->
+	<div id="news-manager-modal" class="modal">
+		<div class="modal-content" style="text-align: left; max-width: 400px;">
+			<h3 style="text-align: center; margin-top:0;">📢 管理首頁動態</h3>
+			<div id="news-manager-list" style="margin-bottom: 20px; max-height: 200px; overflow-y: auto;">載入中...</div>
+			<hr style="border:0; border-top:1px dashed #ddd; margin: 15px 0;">
+			<h4 style="margin: 0 0 10px 0; color: var(--primary);">新增一則動態</h4>
+			<div class="input-group">
+				<label>標籤名稱 (例如：更新、功能)</label>
+				<input type="text" id="input-news-tag" class="login-input" placeholder="例如：更新">
+			</div>
+			<div class="input-group">
+				<label>標籤顏色</label>
+				<select id="input-news-color" class="login-input" style="padding: 10px;">
+					<option value="update">🟡 黃色 (更新/修復)</option>
+					<option value="feature">🟢 綠色 (新功能)</option>
+					<option value="security">🔴 紅色 (重大/安全)</option>
+					<option value="info">🔵 藍色 (一般資訊)</option>
+				</select>
+			</div>
+			<div class="input-group">
+				<label>動態內容</label>
+				<input type="text" id="input-news-content" class="login-input" placeholder="輸入動態內容...">
+			</div>
+			<button class="btn" style="width: 100%; background: var(--primary);" onclick="addPublicNews()">+發佈動態</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeNewsManagerModal()">關閉</button>
+		</div>
+	</div>
+	<!-- 📡 發送系統推播 -->
+	<div id="broadcast-manager-modal" class="modal">
+		<div class="modal-content" style="text-align: left; max-width: 400px;">
+			<h3 style="text-align: center; margin-top:0;">📡 發送系統推播</h3>
+			<p style="text-align: center; color: #888; font-size: 0.85rem; margin-bottom: 15px;">此通知將會發送給所有註冊的使用者。</p>
+			<div class="input-group">
+				<label>推播類型 (標籤顏色)</label>
+				<select id="input-broadcast-color" class="login-input" style="padding: 10px;">
+					<option value="info">🔵 藍色 (一般資訊)</option>
+					<option value="success">🟢 綠色 (新功能/成功)</option>
+					<option value="warning">🟡 黃色 (提醒/更新)</option>
+					<option value="danger">🔴 紅色 (重大/警告)</option>
+				</select>
+			</div>
+			<div class="input-group">
+				<label>通知標題</label>
+				<input type="text" id="input-broadcast-title" class="login-input" placeholder="例如：系統維護通知、新功能上線">
+			</div>
+			<div class="input-group">
+				<label>通知內容</label>
+				<textarea id="input-broadcast-content" class="login-input" placeholder="輸入要廣播的詳細內容..." style="height: 100px; resize: none;"></textarea>
+			</div>
+			<button class="btn" style="width: 100%; background: #9b59b6;" onclick="sendBroadcast()">🚀 立即發送全域推播</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeBroadcastModal()">取消</button>
+		</div>
+	</div>
+	<!-- 🚀 更新日誌草稿管理 -->
+	<div id="update-log-manager-modal" class="modal" style="z-index: 99999;">
+		<div class="modal-content" style="max-width: 500px; text-align: left;">
+			<h3 style="text-align: center; margin-top:0; color: var(--primary);">🚀 更新日誌草稿管理</h3>
+			<p style="text-align: center; color: #888; font-size: 0.85rem; margin-bottom: 15px;">預先撰寫好更新日誌。解除系統維護模式時，您可以選擇從這裡發布。</p>
+			<div id="update-log-drafts-list" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;"></div>
+			<hr style="border:0; border-top:1px dashed #ddd; margin: 15px 0;">
+			<h4 style="margin: 0 0 10px 0; color: var(--primary);">新增日誌草稿</h4>
+			<div class="input-group">
+				<label>版本號 (例如: v3.8.0)</label>
+				<input type="text" id="input-update-version" class="login-input" placeholder="例如：v3.8.0">
+			</div>
+			<div class="input-group">
+				<label>更新內容 HTML</label>
+				<textarea id="input-update-content" class="login-input" style="height: 150px; font-family: monospace; font-size: 0.85rem; resize: vertical;" placeholder="請輸入更新內容的 HTML..."></textarea>
+				<p style="font-size: 0.8rem; color: #999; margin-top: 5px;">可以直接在這邊編寫要秀給使用者看的 HTML 結構。</p>
+			</div>
+			<button class="btn" style="width: 100%; background: var(--primary); margin-top: 10px;" onclick="saveUpdateLogDraft()">💾 儲存至草稿</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeUpdateLogManagerModal()">關閉</button>
+		</div>
+	</div>
+	<!-- ✅ 解除系統維護模式 -->
+	<div id="maintenance-unlock-modal" class="modal" style="z-index: 99999;">
+		<div class="modal-content" style="max-width: 400px; text-align: left;">
+			<h3 style="text-align: center; margin-top:0; color: #2ecc71;">✅ 解除系統維護模式</h3>
+			<p style="text-align: center; color: #666; font-size: 0.95rem; margin-bottom: 15px;">解除後，所有學生將恢復正常登入。<br>您可以選擇一同發布更新日誌：</p>
+			<div class="input-group">
+				<label>選擇要發布的更新日誌 (選填)</label>
+				<select id="unlock-update-log-select" class="login-input" style="background:white; padding: 10px;">
+					<option value="">無 (不發布任何更新日誌)</option>
+				</select>
+			</div>
+			<button class="btn" style="width: 100%; background: #2ecc71; margin-top: 10px;" onclick="confirmUnlockMaintenance()">🚀 確定解除並發布</button>
+			<button class="btn" style="width: 100%; margin-top: 10px; background: transparent; color: #666; border: 1px solid #ddd;" onclick="closeMaintenanceUnlockModal()">取消</button>
+		</div>
+	</div>
+	<!-- ⚠️ 系統維護預告 -->
+	<div id="maintenance-alert-modal" class="modal" style="z-index: 99999;">
+		<div class="modal-content" style="max-width: 400px; text-align: center; border-top: 6px solid #f39c12;">
+			<h2 style="margin-top: 0; color: #d35400; font-size: 1.5rem;">⚠️ 系統維護預告</h2>
+			<p id="alert-modal-msg" style="margin: 15px 0; color: #555; line-height: 1.6; font-size: 1rem; font-weight: bold;"> </p>
+			<div style="background: #fffcf3; border-radius: 8px; padding: 15px; margin: 15px 0; text-align: left; border: 1px dashed #f39c12;">
+				<div style="font-size: 0.85rem; color: #888; margin-bottom: 5px;">🕒 預計維護時間：</div>
+				<div style="color: #d35400; font-weight: bold; font-size: 0.95rem;">
+					<span id="alert-modal-start"></span>&nbsp;至&nbsp;<span id="alert-modal-end"></span>
+				</div>
+			</div>
+			<button class="btn" style="width: 100%; background: #f39c12; font-size: 1.1rem; margin-top: 10px;" onclick="closeMaintenanceAlert()">我知道了</button>
+		</div>
+	</div>
+	<!-- 🚀 系統更新通知 -->
+	<div id="update-log-modal" class="modal" style="z-index: 99999;">
+		<div class="modal-content" style="max-width: 500px; text-align: left; border-top: 6px solid var(--primary); max-height: 80vh; overflow-y: auto;">
+			<h2 style="margin-top: 0; color: var(--primary); font-size: 1.5rem; text-align: center;">🚀 系統更新通知 (<span id="update-log-version"></span>)</h2>
+			<div id="update-log-content" style="margin: 15px 0; color: #555; line-height: 1.6; font-size: 1rem;">
+				<!-- 更新內容將透過 JS 動態載入 -->
+			</div>
+			<button class="btn" style="width: 100%; background: var(--primary); font-size: 1.1rem; margin-top: 10px;" onclick="closeUpdateLogModal()">太棒了，開始使用！</button>
+		</div>
+	</div>
+
+
+	<script>
+		// 顏色選擇輔助函式 (全域)
+		window.selectColor = function (hex, element) {
+			document.getElementById('input-color').value = hex;
+			// 移除所有按鈕的 selected 樣式
+			const swatches = document.querySelectorAll('.color-swatch');
+			swatches.forEach(sw => sw.classList.remove('selected'));
+			// 加上當前的
+			if (element) element.classList.add('selected');
+		}
+	</script>
+
+	<script src="js/firebase.js"></script>
+	<script src="js/state.js"></script>
+	<script src="js/ui.js"></script>
+	<script src="js/course.js"></script>
+	<script src="js/grade.js"></script>
+	<script src="js/data.js"></script>
+	<script src="js/semester.js"></script>
+	<script src="js/auth.js"></script>
+	<script src="js/main.js"></script>
+	<script src="js/calendar.js"></script>
+	<script src="js/accounting.js"></script>
+	<script src="js/anniversary.js"></script>
+	<script src="js/lottery.js"></script>
+	<script src="js/homework.js"></script>
+	<script src="js/gradecalc.js"></script>
+	<script src="js/selfstudy.js"></script>
+	<script src="js/feedback.js"></script>
+</body>
+
+</html>
