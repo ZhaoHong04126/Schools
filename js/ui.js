@@ -613,7 +613,8 @@ window.toggleMobileMenu = function() {
 /* ========================================================================== */
 
 let publicNewsList = [];
-// 管理員前置作業(輸入密碼認證)(需)
+
+// 管理員前置作業(輸入密碼認證)
 window.openNewsManagerModal = function() {
     showPrompt("請輸入管理員密碼：", "", "🔒 權限驗證").then(password => {
         if (password === null) return; 
@@ -626,9 +627,10 @@ window.openNewsManagerModal = function() {
         document.getElementById('news-manager-modal').style.display = 'flex';
         document.getElementById('news-manager-list').innerHTML = '<p style="text-align:center; color:#999;">載入中...</p>';
         
-        db.collection("public").doc("landing_news").get().then(doc => {
-            if (doc.exists && doc.data().items) {
-                publicNewsList = doc.data().items;
+        supabase.from("system_settings").select("data").eq("id", "landing_news").single()
+        .then(({ data: row, error }) => {
+            if (row && row.data && row.data.items) {
+                publicNewsList = row.data.items;
             } else {
                 publicNewsList = [];
             }
@@ -640,6 +642,7 @@ window.openNewsManagerModal = function() {
 window.closeNewsManagerModal = function() {
     document.getElementById('news-manager-modal').style.display = 'none';
 }
+
 // 管理員撰寫動態
 function renderNewsManagerList() {
     const listDiv = document.getElementById('news-manager-list');
@@ -669,8 +672,9 @@ function renderNewsManagerList() {
     });
     listDiv.innerHTML = html;
 }
+
 // 發布動態
-window.addPublicNews = function() {
+window.addPublicNews = async function() {
     const tag = document.getElementById('input-news-tag').value.trim();
     const colorType = document.getElementById('input-news-color').value;
     const content = document.getElementById('input-news-content').value.trim();
@@ -686,42 +690,45 @@ window.addPublicNews = function() {
     else if (colorType === 'security') { bgColor = 'rgba(231, 76, 60, 0.3)'; color = '#e74c3c'; }
     else { bgColor = 'rgba(52, 152, 219, 0.3)'; color = '#2980b9'; }
 
-    // 加入 ISO 格式的時間紀錄
     publicNewsList.unshift({ tag, bgColor, color, content, time: new Date().toISOString() });
 
-    db.collection("public").doc("landing_news").set({
-        items: publicNewsList,
-        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(() => {
+    try {
+        const { error } = await supabase.from("system_settings").upsert({
+            id: "landing_news",
+            data: { items: publicNewsList },
+            updated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+        
         document.getElementById('input-news-tag').value = '';
         document.getElementById('input-news-content').value = '';
         renderNewsManagerList();
         if (typeof renderAdminNewsDisplay === 'function') renderAdminNewsDisplay();
         showAlert("✨ 動態已成功發佈！登出回首頁即可看到。");
-    }).catch((error) => {
+    } catch (error) {
         console.error("發佈動態失敗：", error);
-        showAlert("❌ 發佈失敗！這通常是 Firebase 資料庫權限不足的問題。\n請檢查 Firestore Security Rules。\n\n錯誤細節: " + error.message, "系統錯誤");
-    });
-
+        showAlert("❌ 發佈失敗！\n錯誤細節: " + error.message, "系統錯誤");
+    }
 }
+
 // 刪除動態
 window.deletePublicNews = function(index) {
-    showConfirm("確定要刪除這則首頁動態嗎？").then(ok => {
+    showConfirm("確定要刪除這則首頁動態嗎？").then(async ok => {
         if(ok) {
             publicNewsList.splice(index, 1);
-            db.collection("public").doc("landing_news").set({
-                items: publicNewsList,
-                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-            }).then(() => {
-                renderNewsManagerList();
+            await supabase.from("system_settings").upsert({
+                id: "landing_news",
+                data: { items: publicNewsList },
+                updated_at: new Date().toISOString()
             });
+            renderNewsManagerList();
         }
     });
 }
 
 /* ---- 📌 全域推播廣播系統 (System Broadcast)---- */
 
-// 【管理員專用】開啟廣播視窗(需)
+// 【管理員專用】開啟廣播視窗
 window.openBroadcastModal = function() {
     showPrompt("請輸入管理員密碼：", "", "🔒 權限驗證").then(password => {
         if (password === null) return; 
@@ -735,12 +742,11 @@ window.openBroadcastModal = function() {
     });
 }
 
-// 【管理員專用】關閉廣播視窗
 window.closeBroadcastModal = function() {
     document.getElementById('broadcast-manager-modal').style.display = 'none';
 }
 
-// 【管理員專用】發送廣播至 Firebase
+// 【管理員專用】發送廣播至 Supabase
 window.sendBroadcast = function() {
     const type = document.getElementById('input-broadcast-color').value;
     const title = document.getElementById('input-broadcast-title').value.trim();
@@ -751,40 +757,42 @@ window.sendBroadcast = function() {
         return;
     }
 
-    showConfirm(`確定要發送這則推播給「所有使用者」嗎？\n\n標題：${title}`, "📡 發送確認").then(ok => {
+    showConfirm(`確定要發送這則推播給「所有使用者」嗎？\n\n標題：${title}`, "📡 發送確認").then(async ok => {
         if (ok) {
             const broadcastId = "broadcast_" + new Date().getTime();
 
-            db.collection("public").doc("broadcasts").get().then(doc => {
-                let items = [];
-                if (doc.exists && doc.data().items) {
-                    items = doc.data().items;
-                }
+            try {
+                const { data: row } = await supabase.from("system_settings").select("data").eq("id", "broadcasts").single();
+                let items = (row && row.data && row.data.items) ? row.data.items : [];
                 
-                items.unshift({ id: broadcastId, title: title, message: content,type: type, time: new Date().toISOString() });
+                items.unshift({ id: broadcastId, title: title, message: content, type: type, time: new Date().toISOString() });
                 if (items.length > 20) items = items.slice(0, 20);
 
-                db.collection("public").doc("broadcasts").set({
-                    items: items,
-                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-                }).then(() => {
-                    closeBroadcastModal();
-                    if (typeof renderAdminBroadcastDisplay === 'function') renderAdminBroadcastDisplay();
-                    showAlert("🚀 廣播已成功寫入資料庫！\n使用者下次登入或重整時將會收到通知。");
-                }).catch(error => {
-                    console.error("廣播發送失敗：", error);
-                    showAlert("❌ 發送失敗，請檢查權限：" + error.message, "系統錯誤");
+                const { error } = await supabase.from("system_settings").upsert({
+                    id: "broadcasts",
+                    data: { items: items },
+                    updated_at: new Date().toISOString()
                 });
-            });
+                
+                if (error) throw error;
+
+                closeBroadcastModal();
+                if (typeof renderAdminBroadcastDisplay === 'function') renderAdminBroadcastDisplay();
+                showAlert("🚀 廣播已成功寫入資料庫！\n使用者下次登入或重整時將會收到通知。");
+            } catch (error) {
+                console.error("廣播發送失敗：", error);
+                showAlert("❌ 發送失敗：" + error.message, "系統錯誤");
+            }
         }
     });
 }
 
 // 【全體使用者】讀取雲端的廣播紀錄並推入通知中心
 window.checkSystemBroadcasts = function() {
-    db.collection("public").doc("broadcasts").get().then(doc => {
-        if (doc.exists && doc.data().items) {
-            const broadcasts = doc.data().items;
+    supabase.from("system_settings").select("data").eq("id", "broadcasts").single()
+    .then(({ data: row, error }) => {
+        if (row && row.data && row.data.items) {
+            const broadcasts = row.data.items;
             for (let i = broadcasts.length - 1; i >= 0; i--) {
                 const b = broadcasts[i];
                 addNotification("📢 " + b.title, b.message, b.id, b.type || 'info');
@@ -805,16 +813,16 @@ window.openUpdateLogManagerModal = function() {
             showAlert("密碼錯誤，您沒有權限存取！", "❌ 拒絕存取");
             return;
         }
-        
         document.getElementById('update-log-manager-modal').style.display = 'flex';
         loadUpdateLogDrafts();
     });
 }
 
 function loadUpdateLogDrafts() {
-    db.collection("public").doc("update_logs_drafts").get().then((doc) => {
-        if (doc.exists && doc.data().items) {
-            updateLogDraftsList = doc.data().items;
+    supabase.from("system_settings").select("data").eq("id", "update_logs_drafts").single()
+    .then(({ data: row }) => {
+        if (row && row.data && row.data.items) {
+            updateLogDraftsList = row.data.items;
         } else {
             updateLogDraftsList = [];
         }
@@ -844,25 +852,24 @@ function renderUpdateLogDrafts() {
 }
 
 window.deleteUpdateLogDraft = function(index) {
-    showConfirm("確定要刪除這個草稿嗎？").then(ok => {
+    showConfirm("確定要刪除這個草稿嗎？").then(async ok => {
         if (ok) {
             updateLogDraftsList.splice(index, 1);
-            db.collection("public").doc("update_logs_drafts").set({
-                items: updateLogDraftsList
-            }).then(() => {
-                renderUpdateLogDrafts();
+            await supabase.from("system_settings").upsert({
+                id: "update_logs_drafts",
+                data: { items: updateLogDraftsList }
             });
+            renderUpdateLogDrafts();
         }
     });
 }
 
-// 【管理員專用】關閉更新顯示框管理視窗
 window.closeUpdateLogManagerModal = function() {
     document.getElementById('update-log-manager-modal').style.display = 'none';
 }
 
-// 【管理員專用】儲存設定至 Firebase 草稿區
-window.saveUpdateLogDraft = function() {
+// 【管理員專用】儲存設定至草稿區
+window.saveUpdateLogDraft = async function() {
     const version = document.getElementById('input-update-version').value.trim();
     const content = document.getElementById('input-update-content').value.trim();
 
@@ -877,17 +884,19 @@ window.saveUpdateLogDraft = function() {
         time: new Date().toISOString()
     });
 
-    db.collection("public").doc("update_logs_drafts").set({
-        items: updateLogDraftsList
-    }).then(() => {
+    try {
+        await supabase.from("system_settings").upsert({
+            id: "update_logs_drafts",
+            data: { items: updateLogDraftsList }
+        });
         document.getElementById('input-update-version').value = '';
         document.getElementById('input-update-content').value = '';
         renderUpdateLogDrafts();
         showAlert(`✨ 版本 ${version} 的日誌已儲存至草稿！\n在解除系統維護時，您可以選擇發布。`, "儲存成功");
-    }).catch(error => {
+    } catch (error) {
         console.error("更新日誌儲存失敗：", error);
-        showAlert("❌ 儲存失敗，請檢查權限：" + error.message, "系統錯誤");
-    });
+        showAlert("❌ 儲存失敗：" + error.message, "系統錯誤");
+    }
 }
 
 /* ---- 📌 管理台：渲染 首頁動態 與 系統推播 展示區 ---- */
@@ -896,9 +905,10 @@ window.renderAdminNewsDisplay = function() {
     const displayDiv = document.getElementById('admin-display-news');
     if (!displayDiv) return;
 
-    db.collection("public").doc("landing_news").get().then(doc => {
-        if (doc.exists && doc.data().items && doc.data().items.length > 0) {
-            const newsItems = doc.data().items;
+    supabase.from("system_settings").select("data").eq("id", "landing_news").single()
+    .then(({ data: row, error }) => {
+        if (row && row.data && row.data.items && row.data.items.length > 0) {
+            const newsItems = row.data.items;
             let html = '';
             newsItems.forEach((item) => {
                 let timeHtml = '';
@@ -931,12 +941,13 @@ window.renderAdminBroadcastDisplay = function() {
     const displayDiv = document.getElementById('admin-display-broadcasts');
     if (!displayDiv) return;
 
-    db.collection("public").doc("broadcasts").get().then(doc => {
-        if (doc.exists && doc.data().items && doc.data().items.length > 0) {
-            const broadcasts = doc.data().items;
+    supabase.from("system_settings").select("data").eq("id", "broadcasts").single()
+    .then(({ data: row, error }) => {
+        if (row && row.data && row.data.items && row.data.items.length > 0) {
+            const broadcasts = row.data.items;
             let html = '';
             broadcasts.forEach((b) => {
-                let borderColor = '#1565c0'; // 預設藍色
+                let borderColor = '#1565c0'; 
                 if (b.type === 'success') borderColor = '#2ecc71';
                 else if (b.type === 'warning') borderColor = '#f39c12';
                 else if (b.type === 'danger') borderColor = '#e74c3c';
@@ -963,7 +974,6 @@ window.renderAdminBroadcastDisplay = function() {
 
 /* ---- 📌 雙重功能開關系統與維護模式 (Dual Feature Flags) ---- */
 
-// 統一定義所有需要被控管的模組清單
 const moduleList = [
     { id: 'self-study', dbKey: 'enableSelfStudy', name: '🏃 自主學習活動', default: false },
     { id: 'grade-manager', dbKey: 'enableGradeManager', name: '💯 成績與學分', default: true },
@@ -980,10 +990,10 @@ window.renderAdminFeatureFlags = function() {
     const container = document.getElementById('admin-dual-switches-container');
     if (!container) return;
 
-    db.collection("public").doc("feature_flags").get().then(doc => {
-        let data = doc.exists ? doc.data() : {};
+    supabase.from("system_settings").select("data").eq("id", "feature_flags").single()
+    .then(({ data: row }) => {
+        let data = (row && row.data) ? row.data : {};
         
-        // 處理維護模式按鈕
         const isMaintenance = data.maintenanceMode === true;
         const mBtn = document.getElementById('btn-maintenance-mode');
         if (mBtn) {
@@ -996,10 +1006,8 @@ window.renderAdminFeatureFlags = function() {
             }
         }
 
-        // 動態生成各模組的列 (Row) 與左右兩個開關
         let html = '';
         moduleList.forEach(mod => {
-            // 讀取 管理員設定 (若無則取預設)、公開設定 (若無則取預設)
             const adminChecked = data['admin_' + mod.dbKey] !== undefined ? data['admin_' + mod.dbKey] : mod.default;
             const publicChecked = data['public_' + mod.dbKey] !== undefined ? data['public_' + mod.dbKey] : mod.default;
 
@@ -1024,71 +1032,80 @@ window.renderAdminFeatureFlags = function() {
     }).catch(e => console.log("讀取開關狀態失敗", e));
 }
 
-// 2. 【管理台】處理單一切換 (帶有精準的警告文字)
+// 2. 【管理台】處理單一切換
 window.handleDualToggle = function(checkboxElement, featureKey, featureName) {
     const isEnabled = checkboxElement.checked;
     let warningMsg = "";
 
-    // 依據字首判斷是改管理員還是改學生
     if (featureKey.startsWith('admin_')) {
         warningMsg = isEnabled 
-            ? `確定要開啟「${featureName}」嗎？\n\n開啟後，您(管理員)可以在側邊欄看到並測試此模組。`
+            ? `確定要開啟「${featureName}」嗎？\n\n開啟後，您可以在側邊欄看到此模組。`
             : `確定要關閉「${featureName}」嗎？\n\n關閉後，此模組會從您的側邊欄消失。`;
     } else {
         warningMsg = isEnabled 
-            ? `⚠️ 上線確認：確定要開啟「${featureName}」嗎？\n\n開啟後，全站所有一般學生都能開始使用此功能！`
-            : `⚠️ 下線警告：確定要關閉「${featureName}」嗎？\n\n關閉後，一般學生將無法再看到此功能，使用中的人會被踢回首頁。`;
+            ? `⚠️ 上線確認：確定要開啟「${featureName}」嗎？\n\n開啟後，全站所有學生都能開始使用此功能！`
+            : `⚠️ 下線警告：確定要關閉「${featureName}」嗎？\n\n關閉後，一般學生將無法再看到此功能。`;
     }
 
-    showConfirm(warningMsg, "⚙️ 權限變更確認").then(ok => {
+    showConfirm(warningMsg, "⚙️ 權限變更確認").then(async ok => {
         if (ok) {
-            db.collection("public").doc("feature_flags").set({
-                [featureKey]: isEnabled,
-                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true }).then(() => {
+            try {
+                // 先取得原本的 data，修改後覆蓋回去
+                const { data: row } = await supabase.from("system_settings").select("data").eq("id", "feature_flags").single();
+                let currentData = (row && row.data) ? row.data : {};
+                currentData[featureKey] = isEnabled;
+                
+                await supabase.from("system_settings").upsert({
+                    id: "feature_flags",
+                    data: currentData,
+                    updated_at: new Date().toISOString()
+                });
+                
                 showAlert(`「${featureName}」 已成功${isEnabled ? '開啟' : '關閉'}！`, "設定套用");
-                checkFeatureFlags(); // 即時更新自己左側的選單
-            }).catch(error => showAlert("更新失敗：" + error.message, "錯誤"));
+                checkFeatureFlags(); 
+            } catch (error) {
+                showAlert("更新失敗：" + error.message, "錯誤");
+            }
         } else {
-            checkboxElement.checked = !isEnabled; // 復原勾選狀態
+            checkboxElement.checked = !isEnabled; 
         }
     });
 }
 
 // 3. 【管理台】開關「維護模式」的大按鈕
-window.toggleMaintenanceMode = function() {
-    db.collection("public").doc("feature_flags").get().then(doc => {
-        let isMaintenance = doc.exists && doc.data().maintenanceMode === true;
-        let newState = !isMaintenance;
-        
-        if (newState) {
-            // 開啟維護模式
-            const warningMsg = "⚠️ 極度危險操作！\n\n確定要「開啟」全站維護模式嗎？\n開啟後，除了您之外的所有學生將被強制鎖在門外！";
-            showConfirm(warningMsg, "🚨 維護模式切換").then(ok => {
-                if (ok) {
-                    db.collection("public").doc("feature_flags").set({
-                        maintenanceMode: true,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-                    }, { merge: true }).then(() => {
-                        showAlert(`全站維護模式已成功開啟！`, "設定套用");
-                        renderAdminFeatureFlags(); 
-                    });
-                }
-            });
-        } else {
-            // 解除維護模式，開啟選擇日誌的對話框
-            openMaintenanceUnlockModal();
-        }
-    });
+window.toggleMaintenanceMode = async function() {
+    const { data: row } = await supabase.from("system_settings").select("data").eq("id", "feature_flags").single();
+    let currentData = (row && row.data) ? row.data : {};
+    let isMaintenance = currentData.maintenanceMode === true;
+    let newState = !isMaintenance;
+    
+    if (newState) {
+        const warningMsg = "⚠️ 極度危險操作！\n\n確定要「開啟」全站維護模式嗎？\n開啟後，除了您之外的所有學生將被強制鎖在門外！";
+        showConfirm(warningMsg, "🚨 維護模式切換").then(async ok => {
+            if (ok) {
+                currentData.maintenanceMode = true;
+                await supabase.from("system_settings").upsert({
+                    id: "feature_flags",
+                    data: currentData,
+                    updated_at: new Date().toISOString()
+                });
+                showAlert(`全站維護模式已成功開啟！`, "設定套用");
+                renderAdminFeatureFlags(); 
+            }
+        });
+    } else {
+        openMaintenanceUnlockModal();
+    }
 }
 
 window.openMaintenanceUnlockModal = function() {
-    db.collection("public").doc("update_logs_drafts").get().then((doc) => {
+    supabase.from("system_settings").select("data").eq("id", "update_logs_drafts").single()
+    .then(({ data: row }) => {
         const selectEl = document.getElementById('unlock-update-log-select');
         selectEl.innerHTML = '<option value="">無 (不發布任何更新日誌)</option>';
-        if (doc.exists && doc.data().items && doc.data().items.length > 0) {
-            window._updateLogDrafts = doc.data().items;
-            doc.data().items.forEach((item, index) => {
+        if (row && row.data && row.data.items && row.data.items.length > 0) {
+            window._updateLogDrafts = row.data.items;
+            row.data.items.forEach((item, index) => {
                 const dateStr = new Date(item.time).toLocaleString('zh-TW', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
                 selectEl.innerHTML += `<option value="${index}">${item.version} (${dateStr})</option>`;
             });
@@ -1103,46 +1120,49 @@ window.closeMaintenanceUnlockModal = function() {
     document.getElementById('maintenance-unlock-modal').style.display = 'none';
 }
 
-window.confirmUnlockMaintenance = function() {
+window.confirmUnlockMaintenance = async function() {
     const selectEl = document.getElementById('unlock-update-log-select');
     const selectedIdx = selectEl.value;
     
-    // 關閉維護模式
-    db.collection("public").doc("feature_flags").set({
-        maintenanceMode: false,
-        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true }).then(() => {
-        
-        if (selectedIdx !== "") {
-            // 有選擇日誌 -> 發布
-            const selectedLog = window._updateLogDrafts[selectedIdx];
-            db.collection("public").doc("system_update_log").set({
-                version: selectedLog.version,
-                content: selectedLog.content,
-                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-            }).then(() => {
-                showAlert(`全站維護模式已解除！\n並且已成功發布版本：${selectedLog.version}`, "✅ 系統已開放");
-                renderAdminFeatureFlags(); 
-                localStorage.removeItem('appVersion'); // 測試用，管理員自己也會跳出
-            });
-        } else {
-            showAlert(`全站維護模式已解除！(未發布新日誌)`, "✅ 系統已開放");
-            renderAdminFeatureFlags(); 
-        }
-        closeMaintenanceUnlockModal();
+    const { data: row } = await supabase.from("system_settings").select("data").eq("id", "feature_flags").single();
+    let currentData = (row && row.data) ? row.data : {};
+    currentData.maintenanceMode = false;
+    
+    await supabase.from("system_settings").upsert({
+        id: "feature_flags",
+        data: currentData,
+        updated_at: new Date().toISOString()
     });
+        
+    if (selectedIdx !== "") {
+        const selectedLog = window._updateLogDrafts[selectedIdx];
+        await supabase.from("system_settings").upsert({
+            id: "system_update_log",
+            data: { version: selectedLog.version, content: selectedLog.content },
+            updated_at: new Date().toISOString()
+        });
+        showAlert(`全站維護模式已解除！\n並且已成功發布版本：${selectedLog.version}`, "✅ 系統已開放");
+        localStorage.removeItem('appVersion'); 
+    } else {
+        showAlert(`全站維護模式已解除！(未發布新日誌)`, "✅ 系統已開放");
+    }
+    renderAdminFeatureFlags(); 
+    closeMaintenanceUnlockModal();
 }
 
-// 4. 【一般使用者/管理員】檢查雙開關狀態並控制 UI 顯示(需)
+// 4. 【一般使用者/管理員】檢查雙開關狀態並控制 UI 顯示
 window.checkFeatureFlags = function() {
-    db.collection("public").doc("feature_flags").get().then(doc => {
-        let data = doc.exists ? doc.data() : {};
+    supabase.from("system_settings").select("data").eq("id", "feature_flags").single()
+    .then(({ data: row }) => {
+        let data = (row && row.data) ? row.data : {};
         
-        const ADMIN_UID = '8OeziUfXrKXot4l60U2keePhOwS2'; // 您的專屬管理員 UID
-        const isCurrentUserAdmin = currentUser && currentUser.uid === ADMIN_UID;
-        // const isCurrentUserAdmin = true;
+        // 🌟 請把下方這串文字換成你在 Supabase 註冊的管理員帳號的 UUID！
+        const ADMIN_UID = '請替換為你的_Supabase_管理員_UUID'; 
+        
+        // Supabase 的 user id 是 currentUser.id
+        const isCurrentUserAdmin = currentUser && currentUser.id === ADMIN_UID;
+        
         // --- 🛡️ 第一層防護：檢查維護模式 ---
-        // let maintenanceMode = false; // 強制無視雲端維護狀態
         let maintenanceMode = data.maintenanceMode === true;
         if (maintenanceMode && !isCurrentUserAdmin) {
             let overlay = document.getElementById('system-maintenance-overlay');
@@ -1156,17 +1176,15 @@ window.checkFeatureFlags = function() {
                     <p style="color:#666; font-size:1.1rem; line-height:1.6;">管理員正在進行系統升級與除錯作業。<br>請稍候片刻再回來喔！</p>
                     <button onclick="performLogout()" class="btn" style="margin-top:40px; background:#e74c3c; padding:12px 30px; font-size:1.1rem; border-radius:30px; cursor:pointer; box-shadow: 0 4px 10px rgba(231, 76, 60, 0.3);">登出帳號</button>
                 `;
-                    document.body.appendChild(overlay);
-                    // <button onclick="performLogout()" class="btn" style="margin-top:40px; background:#e74c3c; padding:12px 30px; font-size:1.1rem; border-radius:30px; box-shadow: 0 4px 10px rgba(231, 76, 60, 0.3); cursor: pointer;">登出帳號</button>
+                document.body.appendChild(overlay);
             }
             overlay.style.display = 'flex';
-            return; // 🛑 鎖死在這裡
+            return; 
         } else {
             const overlay = document.getElementById('system-maintenance-overlay');
             if (overlay) overlay.style.display = 'none';
         }
 
-        // --- 🛠️ 第二層控制：雙重開關身分判定 ---
         const toggleNavBtn = (btnId, isVisible) => {
             const btn = document.getElementById(btnId);
             if (btn) btn.style.display = isVisible ? 'flex' : 'none';
@@ -1174,24 +1192,17 @@ window.checkFeatureFlags = function() {
 
         const flags = {};
 
-        // 走訪模組清單，根據目前登入者的身分，決定要看哪一把鑰匙
         moduleList.forEach(mod => {
             const adminKey = 'admin_' + mod.dbKey;
             const publicKey = 'public_' + mod.dbKey;
-            
-            // 取得資料庫設定，若無則拿預設值
             const adminFlag = data[adminKey] !== undefined ? data[adminKey] : mod.default;
             const publicFlag = data[publicKey] !== undefined ? data[publicKey] : mod.default;
 
-            // 核心邏輯：我是管理員就看藍色設定，我是學生就看綠色設定
             const isVisible = isCurrentUserAdmin ? adminFlag : publicFlag;
             flags[mod.id] = isVisible;
-            
-            // 操作 DOM 隱藏或顯示左側選單
             toggleNavBtn('btn-' + mod.id, isVisible);
         });
 
-        // --- 🚪 如果目前停留在被強制關閉的頁面，踢回首頁 ---
         const currentPage = document.body.getAttribute('data-page');
         if (flags[currentPage] === false) {
             switchTab('schedule');
@@ -1203,12 +1214,12 @@ window.checkFeatureFlags = function() {
 
 // 1. 定義目前的系統版本與更新內容
 const SYSTEM_CONFIG = {
-  version: "1.1.0", // 每次發布新功能時，請更新這個版號
+  version: "3.8.0", 
   updateNotes: [
-    "✨ 新增了 OOO 功能，讓操作更便利",
-    "🐛 修復了在部分手機上顯示異常的問題",
-    "🚀 優化了系統載入速度",
-    "📝 介面微調與使用者體驗升級"
+    "✨ 全面遷移至 Supabase 關聯式資料庫",
+    "🚀 大幅提升系統資料讀取速度",
+    "🛡️ 增強 Row Level Security 保護學生隱私",
+    "🐛 修復部分手機瀏覽器的版面異常"
   ]
 };
 
@@ -1216,26 +1227,22 @@ const SYSTEM_CONFIG = {
 function checkSystemUpdate() {
   const savedVersion = localStorage.getItem('campusking_version');
   
-  // 如果沒有紀錄，或是紀錄的版本號與目前版本號不同
   if (savedVersion !== SYSTEM_CONFIG.version) {
-    
-    // 防呆：如果 Firebase Auth 還沒載入完畢，延遲 500 毫秒後再次檢查
     if (typeof currentUser === 'undefined' || !currentUser) {
         setTimeout(checkSystemUpdate, 500);
         return;
     }
 
-    // 判斷是否為新用戶
+    // 判斷是否為新用戶 (Supabase 邏輯)
     let isNewUser = false;
-    if (currentUser && currentUser.metadata) {
-        const creationTime = new Date(currentUser.metadata.creationTime).getTime();
-        const lastSignInTime = new Date(currentUser.metadata.lastSignInTime).getTime();
+    if (currentUser && currentUser.created_at && currentUser.last_sign_in_at) {
+        const creationTime = new Date(currentUser.created_at).getTime();
+        const lastSignInTime = new Date(currentUser.last_sign_in_at).getTime();
         if (Math.abs(lastSignInTime - creationTime) < 10000) {
             isNewUser = true;
         }
     }
 
-    // 🛑 若為新用戶，直接設定為最新版本並跳過顯示更新提示框
     if (isNewUser) {
         localStorage.setItem('campusking_version', SYSTEM_CONFIG.version);
         return;
@@ -1253,10 +1260,7 @@ function showUpdateModal() {
 
   if (!modal) return;
 
-  // 設定版號文字
   versionText.textContent = SYSTEM_CONFIG.version;
-
-  // 動態生成更新列表
   notesList.innerHTML = '';
   SYSTEM_CONFIG.updateNotes.forEach(note => {
     const li = document.createElement('li');
@@ -1264,7 +1268,6 @@ function showUpdateModal() {
     notesList.appendChild(li);
   });
 
-  // 顯示 Modal
   modal.style.display = 'flex';
 }
 
@@ -1274,12 +1277,9 @@ function closeUpdateModal() {
   if (modal) {
     modal.style.display = 'none';
   }
-  // 將最新版號存入 localStorage，下次就不會再跳出
   localStorage.setItem('campusking_version', SYSTEM_CONFIG.version);
 }
 
-// 5. 在網頁載入完成後執行檢查
 document.addEventListener('DOMContentLoaded', () => {
-  // 可以稍微延遲一下再顯示，避免與載入畫面衝突
   setTimeout(checkSystemUpdate, 500); 
 });

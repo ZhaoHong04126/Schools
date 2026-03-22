@@ -2,8 +2,8 @@
 /* 📌 Supabase 核心配置與初始化                                                 */
 /* ========================================================================== */
 
-const SUPABASE_URL = 'https://fpujjzqbgvvzyytruhbz.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_C6A2AJfAYGXUEjrO0ZB4Fw_gRk5r5vg';
+const SUPABASE_URL = 'https://kslxwdszphrijelfefpf.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable__HFXyWt9PLb9yvF1K0LZYg_b3jJoeJI';
 
 // 初始化 Supabase 客戶端
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);

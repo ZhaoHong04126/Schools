@@ -32,7 +32,7 @@ function logout() {
     }
 }
 
-// 執行實際的 Firebase 登出動作並重新整理頁面
+// 執行實際的登出動作並重新整理頁面
 async function performLogout() {
     const { error } = await supabase.auth.signOut();
     if (!error) window.location.reload();

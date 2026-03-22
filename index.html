@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>大學神隊友</title>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/landing.css">
     <style>
@@ -91,7 +91,7 @@
                 <p class="subtitle">一鍵登入，全面掌握你的校園生活</p>
                 <div class="primary-actions">
                     <button class="btn-massive btn-google-massive" onclick="loginWithGoogle()">
-                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" width="24">
                         使用 Google 一鍵登入
                     </button>
                     <button class="btn-massive btn-guest-massive" onclick="loginAnonymously()">
@@ -110,77 +110,114 @@
                         <label style="display:flex; align-items:center; cursor:pointer;">
                             <input type="checkbox" id="chk-remember" style="margin-right: 8px; width:16px; height:16px; accent-color: var(--primary);" checked> 保持登入
                         </label>
-                        <a onclick="forgotPassword()">忘記密碼？</a>
+                        <a onclick="forgotPassword()" style="cursor: pointer;">忘記密碼？</a>
                     </div>
                     <button class="btn-main-outline" onclick="handleLogin()" id="btn-submit">信箱登入</button>
                 </div>
                 <div class="toggle-mode">
                     <span id="toggle-text" style="color: var(--text-muted); font-weight: normal;">還不是校園王？</span>
-                    <span onclick="registerAccount()" id="toggle-btn">立即加入行列</span>
+                    <span onclick="registerAccount()" id="toggle-btn" style="cursor: pointer;">立即加入行列</span>
                 </div>
             </div>
         </div>
     </div>
     
-    <script src="js/firebase.js"></script>
+    <script src="js/supabase.js"></script>
     <script>
-        auth.onAuthStateChanged((user) => {
-            if (user) {
+        // 1. 檢查目前是否已經登入 (取代 auth.onAuthStateChanged 的初始檢查)
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) {
                 window.location.href = 'app.html';
             } else {
                 document.getElementById('landing-page').style.opacity = '1';
             }
         });
 
-        function handleLogin() {
+        // 2. 監聽登入狀態改變
+        supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' && session) {
+                window.location.href = 'app.html';
+            }
+        });
+
+        // 信箱密碼登入
+        async function handleLogin() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
-            const remember = document.getElementById('chk-remember').checked;
 
             if (!email || !password) {
                 alert("請輸入 Email 和密碼");
                 return;
             }
 
-            const persistenceType = remember
-                ? firebase.auth.Auth.Persistence.LOCAL
-                : firebase.auth.Auth.Persistence.SESSION;
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email: email,
+                password: password,
+            });
 
-            auth.setPersistence(persistenceType)
-                .then(() => {
-                    return auth.signInWithEmailAndPassword(email, password);
-                })
-                .catch(e => alert("登入失敗：" + e.message));
+            if (error) alert("登入失敗：" + error.message);
         }
 
-        function registerAccount() {
+        // 註冊新帳號
+        async function registerAccount() {
             const email = prompt("請輸入要註冊的 Email 信箱：");
             if (email) {
                 const password = prompt("請設定密碼 (至少6個字元)：");
                 if (password) {
-                    auth.createUserWithEmailAndPassword(email, password)
-                        .then(() => alert("🎉 註冊成功！系統將自動登入。"))
-                        .catch(e => alert("註冊失敗：" + e.message));
+                    const { data, error } = await supabase.auth.signUp({
+                        email: email,
+                        password: password,
+                    });
+
+                    if (error) {
+                        alert("註冊失敗：" + error.message);
+                    } else {
+                        // Supabase 預設需要 Email 驗證，如果有開啟驗證功能，需提醒使用者收信
+                        alert("🎉 註冊成功！如果系統有要求信箱驗證，請先去收信。否則將自動登入。");
+                    }
                 }
             }
         }
 
-        function loginWithGoogle() { auth.signInWithPopup(provider).catch(e => alert("Google 登入錯誤：" + e.message)); }
-        function loginAnonymously() { auth.signInAnonymously().catch(e => alert("匿名登入錯誤：" + e.message)); }
+        // Google 登入
+        async function loginWithGoogle() { 
+            const { data, error } = await supabase.auth.signInWithOAuth({ 
+                provider: 'google',
+                options: {
+                    // 設定登入成功後要跳轉回哪個頁面
+                    redirectTo: window.location.origin + window.location.pathname.replace('index.html', '') + 'app.html'
+                }
+            });
+            if (error) alert("Google 登入錯誤：" + error.message);
+        }
 
-        function forgotPassword() {
+        // 匿名登入 (要在 Supabase 後台 Auth -> Providers 開啟 Anonymous 功能)
+        async function loginAnonymously() { 
+            const { data, error } = await supabase.auth.signInAnonymously();
+            if (error) alert("匿名登入錯誤：" + error.message);
+        }
+
+        // 忘記密碼
+        async function forgotPassword() {
             const email = document.getElementById('email').value;
             if (!email) {
                 alert("請先在上方輸入您的 Email 信箱，系統才能寄送重設信給您！");
                 return;
             }
             if (confirm(`確定要寄送重設密碼信件至 ${email} 嗎？`)) {
-                auth.sendPasswordResetEmail(email)
-                    .then(() => alert("📧 重設信已寄出！請檢查信箱。"))
-                    .catch(e => alert("發送失敗：" + e.message));
+                const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: window.location.origin + window.location.pathname,
+                });
+
+                if (error) {
+                    alert("發送失敗：" + error.message);
+                } else {
+                    alert("📧 重設信已寄出！請檢查信箱。");
+                }
             }
         }
 
+        // UI Modal 控制
         function openLoginModal() {
             document.querySelector('.right-panel').classList.add('show-modal');
         }

@@ -2,26 +2,28 @@
 /* 📌 應用程式進入點與狀態監聽 (App Entry Point & Auth Listener)             */
 /* ========================================================================== */
 
-// 🌟 將監聽回呼函式加上 async，讓內部可以使用 await 來排隊執行
-auth.onAuthStateChanged(async (user) => {
+// 🌟 Supabase 狀態監聽
+supabase.auth.onAuthStateChange(async (event, session) => {
+    const user = session ? session.user : null;
+
     if (user) {
         currentUser = user;
         updateLoginUI(true);
 
         // 🌟 核心修復：強制等待 loadData() 完全執行完畢 (包含等待雲端下載)
-        // 這樣能保證在執行下一行的 initUI() 前，資料絕對已經被填好！
         await loadData();
 
-        // 🌟 資料準備好後，才開始初始化畫面、抓取推播 (原本觸發覆寫的元兇)
+        // 🌟 資料準備好後，才開始初始化畫面、抓取推播
         initUI();
 
-        if (user.uid === '8OeziUfXrKXot4l60U2keePhOwS2') {
-        const adminNav = document.getElementById('admin-nav-section'); // 新增的左側選單
-        if (adminNav) adminNav.style.display = 'block';
+        // ⚠️ 注意：這裡的 UID 還是你舊版 Firebase 的！
+        // 記得用你的管理員帳號登入新系統後，把這串換成你新的 Supabase ID (通常是 UUID 格式)
+        if (user.id === '8OeziUfXrKXot4l60U2keePhOwS2') {
+            const adminNav = document.getElementById('admin-nav-section');
+            if (adminNav) adminNav.style.display = 'block';
         }
 
         const hash = window.location.hash.replace('#', '');
-
         if (hash && document.getElementById('view-' + hash)) {
             switchTab(hash, false);
         } else {
@@ -37,6 +39,18 @@ auth.onAuthStateChanged(async (user) => {
     } else {
         currentUser = null;
         updateLoginUI(false);
+        // 如果沒有登入，自動導回首頁
+        if (window.location.pathname.includes('app.html')) {
+            window.location.href = 'index.html';
+        }
+    }
+});
+
+// 如果頁面載入時已經有 session，手動觸發一次初始化
+supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session) {
+        // onAuthStateChange 通常在初始載入時也會觸發 (SIGNED_IN 或 INITIAL_SESSION)
+        // 但加上這段可以做雙重保險
     }
 });
 
@@ -57,14 +71,19 @@ async function saveMaintenanceSettings() {
     }
 
     try {
-        // 寫入 Firebase
-        await db.collection("public").doc("maintenance").set({
-            enabled: enabled,
-            startTime: startTime,
-            endTime: endTime,
-            message: message
-        }, { merge: true });
+        // 寫入 Supabase (存入 system_settings 表格，以 JSONB 格式存放在 data 欄位)
+        const { error } = await supabase.from("system_settings").upsert({
+            id: 'maintenance',
+            data: {
+                enabled: enabled,
+                startTime: startTime,
+                endTime: endTime,
+                message: message
+            },
+            updated_at: new Date().toISOString()
+        });
 
+        if (error) throw error;
         alert("✅ 維護公告設定已成功發布！");
     } catch (error) {
         console.error("發布維護設定失敗：", error);
@@ -75,20 +94,17 @@ async function saveMaintenanceSettings() {
 // 2. 學生端檢查公告 (登入時呼叫)
 async function checkMaintenanceAlert() {
     try {
-        const docSnap = await db.collection("public").doc("maintenance").get();
+        const { data: row, error } = await supabase.from("system_settings").select("data").eq("id", "maintenance").single();
 
-        if (docSnap.exists) {
-            const data = docSnap.data();
+        if (row && row.data) {
+            const data = row.data;
 
             // 如果啟用，且有設定結束時間
             if (data.enabled && data.endTime) {
                 const now = new Date();
                 const endDate = new Date(data.endTime);
 
-                // 核心邏輯：現在時間 < 結束時間 才顯示，且這個 Session 沒點過「我知道了」
                 if (now < endDate && !sessionStorage.getItem('maintenanceAlertSeen')) {
-
-                    // 格式化時間
                     const formatTime = (timeStr) => {
                         return new Date(timeStr).toLocaleString('zh-TW', {
                             month: '2-digit', day: '2-digit',
@@ -96,12 +112,9 @@ async function checkMaintenanceAlert() {
                         });
                     };
 
-                    // 填入資料到 Modal
                     document.getElementById('alert-modal-msg').innerText = data.message || "系統將進行維護，期間可能無法使用。";
                     document.getElementById('alert-modal-start').innerText = formatTime(data.startTime);
                     document.getElementById('alert-modal-end').innerText = formatTime(data.endTime);
-
-                    // 顯示 Modal
                     document.getElementById('maintenance-alert-modal').style.display = 'flex';
                 }
             }
@@ -111,10 +124,8 @@ async function checkMaintenanceAlert() {
     }
 }
 
-// 3. 關閉彈窗並記錄 (避免一直跳出)
 function closeMaintenanceAlert() {
     document.getElementById('maintenance-alert-modal').style.display = 'none';
-    // 寫入 SessionStorage，這樣只要不關閉瀏覽器分頁，就不會再跳出來煩人
     sessionStorage.setItem('maintenanceAlertSeen', 'true');
 }
 
@@ -122,30 +133,28 @@ function closeMaintenanceAlert() {
 /* 🚀 系統更新日誌功能 (Update Log)                                          */
 /* ========================================================================== */
 
-// 檢查是否需要顯示更新公告 (改為從 Firebase 讀取)
 function checkUpdateModal() {
-    db.collection("public").doc("system_update_log").get().then((doc) => {
-        if (doc.exists) {
-            const data = doc.data();
+    supabase.from("system_settings").select("data").eq("id", "system_update_log").single()
+    .then(({ data: row, error }) => {
+        if (row && row.data) {
+            const data = row.data;
             const CURRENT_VERSION = data.version || 'v1.0.0';
             const UPDATE_LOG = data.content || '<p style="text-align: center;">無更新內容</p>';
 
             const savedVersion = localStorage.getItem('appVersion');
 
             // 判斷是否為新用戶 (建立時間與最後登入時間相差小於 10 秒)
+            // 在 Supabase 中，我們可以用 created_at 和 last_sign_in_at 來判斷
             let isNewUser = false;
-            if (currentUser && currentUser.metadata) {
-                const creationTime = new Date(currentUser.metadata.creationTime).getTime();
-                const lastSignInTime = new Date(currentUser.metadata.lastSignInTime).getTime();
+            if (currentUser && currentUser.created_at && currentUser.last_sign_in_at) {
+                const creationTime = new Date(currentUser.created_at).getTime();
+                const lastSignInTime = new Date(currentUser.last_sign_in_at).getTime();
                 if (Math.abs(lastSignInTime - creationTime) < 10000) {
                     isNewUser = true;
                 }
             }
 
-            // 如果沒有儲存的版本號，或者是舊版本
             if (savedVersion !== CURRENT_VERSION) {
-                
-                // 🛑 若為新用戶，直接記錄最新版本號並跳過顯示
                 if (isNewUser) {
                     localStorage.setItem('appVersion', CURRENT_VERSION);
                     return;
@@ -160,17 +169,15 @@ function checkUpdateModal() {
                     }
                     document.getElementById('update-log-modal').style.display = 'flex';
                 }
-                // 暫存最新版本號，等待使用者點擊關閉按鈕時寫入 localStorage
                 window._latestAppVersion = CURRENT_VERSION;
             }
         }
     }).catch(e => console.error("讀取系統更新日誌失敗:", e));
 }
 
-// 關閉更新公告並記錄為已讀
 function closeUpdateLogModal() {
     document.getElementById('update-log-modal').style.display = 'none';
     if (window._latestAppVersion) {
-        localStorage.setItem('appVersion', window._latestAppVersion); // 記錄已讀當前版本
+        localStorage.setItem('appVersion', window._latestAppVersion);
     }
 }

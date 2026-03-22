@@ -15,16 +15,17 @@ async function submitFeedback() {
     submitBtn.innerText = "送出中...";
 
     try {
-        // 假設 currentUser 已經在 auth.js 中定義
-        const uid = currentUser ? currentUser.uid : "anonymous";
+        const uid = currentUser ? currentUser.id : "anonymous"; // 改為 currentUser.id
         
-        await db.collection("feedbacks").add({
+        const { error } = await supabase.from("feedbacks").insert([{
             uid: uid,
             type: type,
             content: content,
-            status: "pending", // 預設狀態：待處理
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
+            status: "pending"
+            // created_at 會由 Supabase 自動填入
+        }]);
+
+        if (error) throw error;
 
         alert("感謝您的回饋！我們已經收到囉。");
         document.getElementById('feedback-content').value = "";
@@ -52,7 +53,7 @@ async function loadAdminFeedbacks() {
 
     const originalBg = adminView.style.backgroundColor;
     const originalMinHeight = adminView.style.minHeight;
-    adminView.style.backgroundColor = '#8b0000'; // 暗紅色
+    adminView.style.backgroundColor = '#8b0000'; 
     adminView.style.minHeight = '80vh';
 
     const warningDiv = document.createElement('div');
@@ -70,7 +71,6 @@ async function loadAdminFeedbacks() {
     };
     // ----------------------------------------
 
-    // 添加二次驗證保護：管理員密碼
     const psw = await showPrompt("請輸入管理員密碼以存取使用者回饋：", "", "🔒 權限驗證 (1/3)");
     if (psw === null) {
         restoreView();
@@ -79,35 +79,28 @@ async function loadAdminFeedbacks() {
     }
 
     if (psw !== "zhao20261150304") {
-        if (typeof showAlert === 'function') {
-            showAlert("密碼錯誤，拒絕存取！", "❌ 拒絕存取");
-        } else {
-            alert("❌ 密碼錯誤，拒絕存取！");
-        }
+        if (typeof showAlert === 'function') showAlert("密碼錯誤，拒絕存取！", "❌ 拒絕存取");
+        else alert("❌ 密碼錯誤，拒絕存取！");
         restoreView();
         listContainer.innerHTML = "<tr><td colspan='6' style='color: red; font-weight: bold; text-align: center;'>驗證失敗，為保護使用者隱私，拒絕顯示資料。</td></tr>";
         if (typeof switchTab === 'function') switchTab('schedule');
         return;
     }
 
-    // 第三次驗證防護機制：問答題一
     const ans1 = await showPrompt("管理者最喜歡吃什麼？", "", "🛡️ 第二次驗證防護 (2/3)");
     if (ans1 === null || ans1.trim() !== "鳳梨湯") {
         if (typeof showAlert === 'function') showAlert("答案錯誤，拒絕存取！", "❌ 拒絕存取");
         else alert("❌ 答案錯誤，拒絕存取！");
-        
         restoreView();
         listContainer.innerHTML = "<tr><td colspan='6' style='color: red; font-weight: bold; text-align: center;'>驗證失敗，為保護使用者隱私，拒絕顯示資料。</td></tr>";
         if (typeof switchTab === 'function') switchTab('schedule');
         return;
     }
 
-    // 第三次驗證防護機制：問答題二
     const ans2 = await showPrompt("管理者人生中的第一個老師是誰？", "", "🛡️ 第三次驗證防護 (3/3)");
     if (ans2 === null || ans2.trim() !== "施淑惠老師") {
         if (typeof showAlert === 'function') showAlert("答案錯誤，拒絕存取！", "❌ 拒絕存取");
         else alert("❌ 答案錯誤，拒絕存取！");
-
         restoreView();
         listContainer.innerHTML = "<tr><td colspan='6' style='color: red; font-weight: bold; text-align: center;'>驗證失敗，為保護使用者隱私，拒絕顯示資料。</td></tr>";
         if (typeof switchTab === 'function') switchTab('schedule');
@@ -119,72 +112,40 @@ async function loadAdminFeedbacks() {
     listContainer.innerHTML = "<tr><td colspan='6'>載入中...</td></tr>";
 
     try {
-        // 依照時間排序，最新的在最上面
-        const snapshot = await db.collection("feedbacks").orderBy("timestamp", "desc").get();
+        // 從 Supabase 讀取並依照時間排序
+        const { data: feedbacks, error } = await supabase.from("feedbacks").select("*").order("created_at", { ascending: false });
+        if (error) throw error;
+
         listContainer.innerHTML = "";
 
-        if (snapshot.empty) {
+        if (!feedbacks || feedbacks.length === 0) {
             listContainer.innerHTML = "<tr><td colspan='6' style='color: gray;'>目前沒有任何回饋資料。</td></tr>";
             return;
         }
 
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            const id = doc.id;
-            // const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : "未知時間";
-            // --- 安全解析時間 ---
-            let date = "未知時間";
-            if (data.timestamp) {
-                try {
-                    if (typeof data.timestamp.toDate === 'function') {
-                        // 情況 1：正常的 Firestore Timestamp 物件
-                        date = data.timestamp.toDate().toLocaleString('zh-TW', { hour12: false });
-                    } else if (data.timestamp.seconds) {
-                        // 情況 2：某些快取狀態下只有 seconds 屬性
-                        date = new Date(data.timestamp.seconds * 1000).toLocaleString('zh-TW', { hour12: false });
-                    } else {
-                        // 情況 3：字串或數字 (通常是在 Firebase 後台手動建立測試資料時發生的)
-                        const parsedDate = new Date(data.timestamp);
-                        if (!isNaN(parsedDate)) {
-                            date = parsedDate.toLocaleString('zh-TW', { hour12: false });
-                        }
-                    }
-                } catch (e) {
-                    console.warn("時間解析失敗:", e, data.timestamp);
-                    date = "時間格式錯誤";
-                }
-            }
-            // --------------------
-            // --- 狀態標籤 (使用 CSS Badge Class) ---
+        feedbacks.forEach(data => {
+            const id = data.id;
+            // Supabase 統一回傳 ISO 時間字串，解析更簡單安全
+            const date = data.created_at ? new Date(data.created_at).toLocaleString('zh-TW', { hour12: false }) : "未知時間";
+            
             let statusBadgeClass = "badge badge-status-pending";
             let statusText = "待處理";
             if (data.status === "processing") { statusBadgeClass = "badge badge-status-processing"; statusText = "處理中"; }
             if (data.status === "resolved") { statusBadgeClass = "badge badge-status-resolved"; statusText = "已解決"; }
 
-            // --- 類型標籤與圖示 (使用 CSS Badge Class) ---
             let typeBadgeClass = "badge badge-type-other";
             let typeIcon = "💬";
             let typeText = "其他";
             if (data.type === "bug") { typeBadgeClass = "badge badge-type-bug"; typeIcon = "🐞"; typeText = "Bug"; }
             if (data.type === "suggestion") { typeBadgeClass = "badge badge-type-suggestion"; typeIcon = "💡"; typeText = "建議"; }
             
-            // --- UID 的完整與短 title ---
-            const fullUid = data.uid || "anonymous";
-            const shortUid = fullUid.substring(0, 8);
-
-            // --- 渲染 HTML (使用優化後的標籤結構) ---
             listContainer.innerHTML += `
                 <tr>
                     <td style="color: black;">${date}</td>
-                    
                     <td style="color: black; font-family: monospace;">${data.uid || "anonymous"}</td> 
-                    
                     <td><span class="${typeBadgeClass}">${typeIcon} ${typeText}</span></td> 
-                    
                     <td style="max-width: 300px; word-wrap: break-word; color: black;">${data.content}</td>
-                    
                     <td><span class="${statusBadgeClass}">${statusText}</span></td> 
-                    
                     <td>
                         <select class="feedback-status-select" onchange="updateFeedbackStatus('${id}', this.value)"> 
                             <option value="pending" ${data.status === 'pending' ? 'selected' : ''}>設為待處理</option>
@@ -206,10 +167,8 @@ async function loadAdminFeedbacks() {
 // ==========================================
 async function updateFeedbackStatus(docId, newStatus) {
     try {
-        await db.collection("feedbacks").doc(docId).update({
-            status: newStatus
-        });
-        // 不強制重新載入整個列表，只需視覺上知道成功即可，或呼叫 loadAdminFeedbacks()
+        const { error } = await supabase.from("feedbacks").update({ status: newStatus }).eq("id", docId);
+        if (error) throw error;
     } catch (error) {
         console.error("更新狀態失敗:", error);
         alert("狀態更新失敗！");
