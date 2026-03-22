@@ -33,11 +33,12 @@ function logout() {
 }
 
 // 執行實際的 Firebase 登出動作並重新整理頁面
-function performLogout() {
-    auth.signOut().then(() => window.location.reload());
+async function performLogout() {
+    const { error } = await supabase.auth.signOut();
+    if (!error) window.location.reload();
 }
 
-// 處理永久註銷(刪除)帳號的流程
+// 處理永久註銷(刪除)帳號的流程 (Supabase 版本)
 function deleteAccount() {
     if (!currentUser) return;
     
@@ -45,6 +46,7 @@ function deleteAccount() {
         showAlert("目前為「🔒 唯讀模式」\n若要刪除帳號，請先切換至編輯狀態。");
         return;
     }
+    
     showConfirm("⚠️ 警告：此動作將「永久刪除」您的所有資料（包含課表、成績、記帳...等），且無法復原！\n\n確定要註銷帳號嗎？", "危險操作")
     .then(isConfirmed => {
         if (isConfirmed) {
@@ -52,29 +54,36 @@ function deleteAccount() {
         }
         return null;
     })
-    .then(inputStr => {
+    .then(async (inputStr) => {
         if (inputStr === "DELETE") {
-            const uid = currentUser.uid;
+            // 注意：Supabase 的 User 物件識別碼通常是 .id，為了保險起見我們兼容 .uid
+            const userId = currentUser.id || currentUser.uid; 
             if(window.showAlert) showAlert("正在刪除資料，請稍候...", "處理中");
 
-            db.collection("users").doc(uid).delete()
-            .then(() => {
-                const dbKey = 'CampusKing_v3.8.0_' + uid;
+            try {
+                // 1. 刪除 Supabase 資料庫中該使用者的關聯資料
+                const { error: dbError } = await supabase
+                    .from("users")
+                    .delete()
+                    .eq("id", userId);
+
+                if (dbError) throw dbError;
+
+                // 2. 清除瀏覽器本地端 LocalStorage 的快取資料
+                const dbKey = 'CampusKing_v3.8.0_' + userId;
                 localStorage.removeItem(dbKey);
-                return currentUser.delete();
-            })
-            .then(() => {
+                
+                // 這裡我們執行登出來清空當前登入狀態
+                await supabase.auth.signOut();
+
                 alert("帳號已成功註銷，感謝您的使用。"); 
                 window.location.href = 'index.html'; // 刪除後跳回登入頁
-            })
-            .catch((error) => {
+
+            } catch (error) {
                 console.error("Delete error:", error);
-                if (error.code === 'auth/requires-recent-login') {
-                    showAlert("🔒 為了確保帳號安全，系統要求您必須「重新登入」後才能執行刪除操作。\n\n請登出後再登入一次試試。", "驗證過期");
-                } else {
-                    showAlert("註銷失敗：" + error.message, "錯誤");
-                }
-            });
+                showAlert("註銷失敗：" + error.message, "錯誤");
+            }
+            
         } else if (inputStr !== null) {
             showAlert("輸入內容不正確，已取消操作。", "取消");
         }

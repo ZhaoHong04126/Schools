@@ -1,5 +1,5 @@
 /* ========================================================================== */
-/* 📌 資料讀寫與初始化 (Data Initialization & Storage)                            */
+/* 📌 資料讀寫與初始化 (Data Initialization & Storage) - Supabase Version         */
 /* ========================================================================== */
 
 // 🌟 新增防呆變數：作為「安全鎖」，確保資料完全解析與載入後，才允許執行存檔動作
@@ -8,8 +8,8 @@ let isDataLoaded = false;
 // 🌟 將 loadData 加上 async，使其成為非同步函式，以便阻擋後續執行
 async function loadData() {
     if (!currentUser) return;
-    const uid = currentUser.uid;
-    const dbKey = 'CampusKing_v3.8.0_' + uid;
+    const userId = currentUser.id || currentUser.uid; // 相容 Supabase 的 User 識別碼
+    const dbKey = 'CampusKing_v3.8.0_' + userId;
     const savedData = localStorage.getItem(dbKey);
 
     if (savedData) {
@@ -18,12 +18,12 @@ async function loadData() {
         refreshUI();
         if (navigator.onLine) {
             // 背景同步，不需要 await 阻擋 UI，但會確保雲端最新資料蓋過本地
-            syncFromCloud(uid);
+            syncFromCloud(userId);
         }
     } else {
         // 🌟 本地沒資料 (換電腦、清除快取、或被維護模式踢出)：必須強制等待雲端下載完成！
         if (navigator.onLine) {
-            await syncFromCloud(uid); // 🌟 加上 await 阻斷後續程式執行，直到下載完畢
+            await syncFromCloud(userId); // 🌟 加上 await 阻斷後續程式執行，直到下載完畢
         } else {
             // 完全離線且無資料才初始化
             initDefaultData();
@@ -140,10 +140,8 @@ function loadSemesterData(sem) {
     semesterEndDate = allData[sem].endDate || "";
 }
 
-// 將目前的所有全域變數打包，儲存至 LocalStorage 並同步至 Firebase 雲端
+// 將目前的所有全域變數打包，儲存至 LocalStorage 並同步至 Supabase 雲端
 function saveData() {
-    // 🌟 極度重要的防禦機制：如果尚未登入，或資料「還沒載入完畢」，絕對禁止存檔！
-    // 這樣可以防止空資料（剛初始化的空陣列）不小心被上傳覆蓋掉雲端的真實資料
     if (!currentUser || !isDataLoaded) {
         console.warn("⚠️ 系統攔截了一次危險的存檔：資料尚未載入完成，防止空資料覆寫雲端。");
         return; 
@@ -179,18 +177,24 @@ function saveData() {
         accCategories: accCategories,
         customPeriods: customPeriods,
         userPreferences: userPreferences,
-        systemNotifications: systemNotifications,
-        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        systemNotifications: systemNotifications
     };
 
-    const dbKey = 'CampusKing_v3.8.0_' + currentUser.uid;
-    const localObj = JSON.parse(JSON.stringify(storageObj)); 
-    delete localObj.lastUpdated; 
-    localStorage.setItem(dbKey, JSON.stringify(localObj));
+    const userId = currentUser.id || currentUser.uid;
+    const dbKey = 'CampusKing_v3.8.0_' + userId;
+    
+    // 儲存至本地端
+    localStorage.setItem(dbKey, JSON.stringify(storageObj));
 
-    db.collection("users").doc(currentUser.uid).set(storageObj, { merge: true })
-    .then(() => {
-        console.log("✅ 資料已備份至雲端");
+    // 使用 Supabase 的 upsert 進行雲端存檔（等同於 Firebase 的 set { merge: true }）
+    supabase.from("users").upsert({ 
+        id: userId, 
+        user_data: storageObj,
+        updated_at: new Date().toISOString()
+    })
+    .then(({ data, error }) => {
+        if (error) throw error;
+        console.log("✅ 資料已備份至 Supabase 雲端");
     })
     .catch((error) => {
         console.error("❌ 雲端備份失敗: ", error);
@@ -199,15 +203,21 @@ function saveData() {
     refreshUI();
 }
 
-// 嘗試從 Firebase 雲端下載最新資料並覆蓋本地資料
+// 嘗試從 Supabase 雲端下載最新資料並覆蓋本地資料
 function syncFromCloud(uid) {
     const statusBtn = document.getElementById('user-badge');
     if(statusBtn) statusBtn.innerText = "同步中...";
 
-    // 🌟 加上 return，將這個 Firebase 請求轉為可被 await 等待的 Promise
-    return db.collection("users").doc(uid).get().then((doc) => {
-        if (doc.exists) {
-            const cloudData = doc.data();
+    // 🌟 將這個 Supabase 請求轉為可被 await 等待的 Promise
+    return supabase.from("users").select("user_data").eq("id", uid).single()
+    .then(({ data, error }) => {
+        // 'PGRST116' 是 Supabase 中「找不到資料 (No rows found)」的錯誤代碼，這代表是新用戶
+        if (error && error.code !== 'PGRST116') {
+            throw error;
+        }
+
+        if (data && data.user_data) {
+            const cloudData = data.user_data;
             console.log("🔥 雲端資料已下載");
             
             parseAndApplyData(cloudData);
@@ -221,9 +231,6 @@ function syncFromCloud(uid) {
             }
         } else {
             console.log("☁️ 此帳號尚無雲端資料，將在此裝置上初始化。");
-            // 雲端沒資料，就在此裝置上初始化一套新的預設資料
-            // 重要：不要在這裡自動觸發 saveData()！
-            // 應該讓使用者手動產生第一筆資料後，由互動操作去觸發存檔。
             initDefaultData();
             refreshUI();
             if(statusBtn) {
@@ -235,7 +242,6 @@ function syncFromCloud(uid) {
         if(statusBtn) statusBtn.innerText = "離線";
     });
 }
-
 
 
 /* ========================================================================== */
