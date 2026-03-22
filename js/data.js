@@ -227,14 +227,14 @@ function syncFromCloud(uid) {
 
             refreshUI();
             if(statusBtn) {
-                statusBtn.innerText = (uid === '8OeziUfXrKXot4l60U2keePhOwS2') ? '👑 管理員' : '學生';
+                statusBtn.innerText = (uid === 'e5edd19c-6e0a-433f-93cc-fade3f5bff74') ? '👑 管理員' : '學生';
             }
         } else {
             console.log("☁️ 此帳號尚無雲端資料，將在此裝置上初始化。");
             initDefaultData();
             refreshUI();
             if(statusBtn) {
-                statusBtn.innerText = (uid === '8OeziUfXrKXot4l60U2keePhOwS2') ? '👑 管理員' : '學生';
+                statusBtn.innerText = (uid === 'e5edd19c-6e0a-433f-93cc-fade3f5bff74') ? '👑 管理員' : '學生';
             }
         }
     }).catch((error) => {
