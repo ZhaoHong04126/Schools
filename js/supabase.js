@@ -1,7 +1,3 @@
-/* ========================================================================== */
-/* 📌 Supabase 核心配置與初始化                                                 */
-/* ========================================================================== */
-
 const SUPABASE_URL = 'https://kslxwdszphrijelfefpf.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable__HFXyWt9PLb9yvF1K0LZYg_b3jJoeJI';
 
