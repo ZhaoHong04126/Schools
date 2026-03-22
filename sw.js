@@ -1,4 +1,4 @@
-const CACHE_NAME = 'CampusKing_v3.8.1-beta_'; 
+const CACHE_NAME = 'CampusKing_v3.8.2_'; 
 
 const ASSETS_TO_CACHE = [
     './',
@@ -14,7 +14,7 @@ const ASSETS_TO_CACHE = [
 	'./css/calendar.css',
 	'./css/settings.css',
     '/css/feedback-admin.css',
-	'./js/firebase.js',
+	'./js/base.js',
 	'./js/state.js',
 	'./js/ui.js',
 	'./js/course.js',
