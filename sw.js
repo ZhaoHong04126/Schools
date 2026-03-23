@@ -14,7 +14,7 @@ const ASSETS_TO_CACHE = [
 	'./css/calendar.css',
 	'./css/settings.css',
     '/css/feedback-admin.css',
-	'./js/base.js',
+	'./js/supabase.js',
 	'./js/state.js',
 	'./js/ui.js',
 	'./js/course.js',
