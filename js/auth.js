@@ -10,12 +10,15 @@ function logout() {
     }
 
     if (currentUser) {
-        if (currentUser.isAnonymous) {
+        // 💡 修正 1：Supabase 判斷匿名帳號的屬性是 is_anonymous (有底線)
+        if (currentUser.is_anonymous) {
             showConfirm("⚠️ 匿名帳號登出後資料會消失，確定嗎？", "警告").then(ok => {
                 if (ok) performLogout();
             });
         } else {
-            const isGoogleUser = currentUser.providerData.some(provider => provider.providerId === 'google.com');
+            // 💡 修正 2：Supabase 判斷登入管道的方式是透過 app_metadata.providers 陣列
+            const providers = currentUser.app_metadata?.providers || [];
+            const isGoogleUser = providers.includes('google');
             
             if (isGoogleUser) {
                 showConfirm("您目前使用 Google 帳號登入，確定要登出嗎？", "登出確認").then(ok => {

@@ -18,7 +18,7 @@ supabase.auth.onAuthStateChange(async (event, session) => {
 
         // ⚠️ 注意：這裡的 UID 還是你舊版 Firebase 的！
         // 記得用你的管理員帳號登入新系統後，把這串換成你新的 Supabase ID (通常是 UUID 格式)
-        if (user.id === '8OeziUfXrKXot4l60U2keePhOwS2') {
+        if (user.id === 'e5edd19c-6e0a-433f-93cc-fade3f5bff74') {
             const adminNav = document.getElementById('admin-nav-section');
             if (adminNav) adminNav.style.display = 'block';
         }
