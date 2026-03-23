@@ -37,8 +37,11 @@ function logout() {
 
 // 執行實際的登出動作並重新整理頁面
 async function performLogout() {
-    const { error } = await supabase.auth.signOut();
-    if (!error) window.location.reload();
+    // 執行登出並清除本地端登入狀態
+    await supabase.auth.signOut();
+    
+    // 移除 if (!error) 的限制，確保發生例外狀況時也能強制導回首頁
+    window.location.href = 'index.html';
 }
 
 // 處理永久註銷(刪除)帳號的流程 (Supabase 版本)
